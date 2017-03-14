@@ -13,28 +13,31 @@ let commands = [];
 let mouse = {};
 
 function drawTile(x, y, world) {
+  context.globalAlpha = 1;
   let tile = world[x][y];
+  let X = Math.floor(x*cellSize);
+  let Y = Math.floor(y*cellSize);
+  let E = Math.ceil(cellSize);
   if (tile.terrain > 0) {
     context.lineWidth = 2;
     context.fillStyle = "#4f9627";
     context.strokeStyle = "#3f751f";
-    let X = Math.floor(x*cellSize);
-    let Y = Math.floor(y*cellSize);
-    let E = Math.ceil(cellSize);
     context.fillRect(X, Y, E, E);
     context.strokeRect(X, Y, E, E);
   }
 
   if (tile.units !== undefined) {
-    let radius = 0.3;
+    let e = Math.ceil(Math.sqrt(tile.units.length));
+    let m = Math.floor((e*e - tile.units.length) / 2);
+
+    let radius = tile.units.length == 1 ? 0 : 0.3;
     let unitSize = 0.08;
     context.fillStyle = tile.player ? "#22A" : "#A22";
-    for (let n = 0; n  < tile.units.length; ++n) {
-      let point = new Point(cellSize * radius, 0)
-        .rotate(n / tile.units.length * 2 * Math.PI)
-        .add(midCell({x, y}));
+    for (let n = m; n < tile.units.length + m; ++n) {
+      let ex = X + (Math.floor(n / e) + 0.5)/e *  cellSize;
+      let ey = Y + (n % e + 0.5)/e *  cellSize;
       context.beginPath();
-      context.arc(point.x, point.y, unitSize * cellSize, 0, 2 * Math.PI);
+      context.arc(ex, ey, unitSize * cellSize, 0, 2 * Math.PI);
       context.fill();
       context.closePath();
     }
@@ -44,12 +47,13 @@ function drawTile(x, y, world) {
 function drawCommands(commands) {
   context.globalAlpha = 0.3;
   context.fillStyle = "yellow";
-  for (const command of commands) {
+  for (let command of commands) {
     let [origin, targets] = command;
     for (const target of targets) {
       let angle = target.angleTo(origin);
       let arrowPos = midCell(target.add(origin).div(2));
-      context.shape(arrowPos, arrow, cellSize/8, angle);
+      let factor = Math.sqrt(targets.length);
+      context.shape(arrowPos, arrow, cellSize/8/factor, angle);
       context.fill();
     }
   }

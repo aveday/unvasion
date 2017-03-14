@@ -39,7 +39,7 @@ function genWorld(width, height) {
     world.push(row);
   }
 
-  world[0][0].units = Units(12);
+  world[0][0].units = Units(15);
   world[0][0].player = 0;
   world[3][1].units = Units(3);
   world[3][1].player = 1;
