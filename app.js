@@ -1,6 +1,5 @@
 "use strict";
 
-var DefaultMap = require('default-map');
 var express = require("express");
 var app = express();
 var http = require("http").Server(app);
@@ -15,32 +14,12 @@ var newId = (() => {
   return () => ++nextId;
 })();
 
-function Unit() {
-  return {id: newId()};
+function Units(n) {
+  return Array(n).fill(0).map(newId);
 }
 
-function Group(world, position, n, player) {
-  let group = {
-    position, player,
-    id: newId(),
-    units: Array(n).map(Unit)
-  };
-
-  world.groups.push(group);
-  world.groupMap.set(group.id, group);
-  world.positionMap.set(position, group);
-  return group;
-}
-
-function genWorld(w, h) {
-  let world = {
-    width: w,
-    height: h,
-    map: [],
-    groups: [],
-    groupMap: new Map(),
-    positionMap: new Map(),
-  };
+function genWorld(width, height) {
+  let world = [];
 
   let noise = new simplex(Math.random);
   let offset = 0.3;
@@ -49,19 +28,21 @@ function genWorld(w, h) {
     {scale: 0.03, amplitude: 1.0},
   ];
 
-  for (let x = 0; x < world.width; ++x) {
+  for (let x = 0; x < width; ++x) {
     let row = [];
-    for (let y = 0;y < world.height; ++y) {
-      let tileValue = offset;
+    for (let y = 0;y < height; ++y) {
+      let tile = {terrain: offset, units: [], player: undefined};
       for (let n of octaveSettings)
-        tileValue += n.amplitude * noise.noise2D(x * n.scale, y * n.scale);
-      row.push(tileValue);
+        tile.terrain += n.amplitude * noise.noise2D(x * n.scale, y * n.scale);
+      row.push(tile);
     }
-    world.map.push(row);
+    world.push(row);
   }
 
-  Group(world, new Point(0, 0), 12, 0);
-  Group(world, new Point(0, 3), 3, 1);
+  world[0][0].units = Units(12);
+  world[0][0].player = 0;
+  world[3][1].units = Units(3);
+  world[3][1].player = 1;
 
   return world;
 }
@@ -74,33 +55,28 @@ function mainPage(req, res) {
   res.render("public/index.html", handleError);
 }
 
-
 function loadCommands(world, playerCommands) {
-  let commands = []
   // load the commands from the player messages
-  for (let pair of playerCommands) {
-    commands.push({id: pair[0], targets: pair[1], index: 0});
-  }
+  let commands = playerCommands
   run(world, commands); //FIXME for real time
 }
 
 function run(world, commands) {
+
   commands.forEach(function (command) {
-    let {targets, id} = command;
-    console.log(command);
+    let [originPosition, targetPositions] = command;
+    let origin = world[originPosition.x][originPosition.y];
 
-    let group = world.groupMap.get(id);
-
-    // create groups splitting from initial group
-    while (targets.length > 1) {
-      let n = Math.floor(group.units.length / targets.length);
-      let newGroup = Group(world, targets.pop(), 0, group.player);
-      newGroup.units = group.units.splice(0, n);
+    while (targetPositions.length > 0) {
+      let n = Math.floor(origin.units.length / targetPositions.length);
+      let targetP = targetPositions.pop();
+      let target = world[targetP.x][targetP.y];
+      target.units = target.units.concat(origin.units.splice(0, n));
+      target.player = origin.player;
     }
-    group.position = targets.pop();
   });
 
-  io.emit("worldSend", world); // FIXME to just send update
+  io.emit("sendWorld", world); // FIXME to just send update
 }
 
 function playerSession(socket) {
@@ -111,9 +87,9 @@ function playerSession(socket) {
   }
 
   console.log("Player connected.\nGenerating world...");
-  let world = genWorld(16, 16);
+  let world = genWorld(4, 4);
   io.emit("msg", "Connected to server");
-  io.emit("worldSend", world);
+  io.emit("sendWorld", world);
   socket.on("commands", commands => loadCommands(world, commands));
   socket.on("msg", msg => console.log(msg));
 }

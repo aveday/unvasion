@@ -9,11 +9,12 @@ let socket = io();
 let player = 0;
 let cellSize;
 let world = {};
-let commands = new Map();
+let commands = [];
 let mouse = {};
 
-function drawTile(x, y, map) {
-  if (map[x][y] > 0) {
+function drawTile(x, y, world) {
+  let tile = world[x][y];
+  if (tile.terrain > 0) {
     context.lineWidth = 2;
     context.fillStyle = "#4f9627";
     context.strokeStyle = "#3f751f";
@@ -23,34 +24,34 @@ function drawTile(x, y, map) {
     context.fillRect(X, Y, E, E);
     context.strokeRect(X, Y, E, E);
   }
-}
 
-function drawGroup(group) {
-  let radius = 0.3;
-  let unitSize = 0.08;
-  context.fillStyle = group.player ? "#22A" : "#A22";
-  for (let n = 0; n  < group.units.length; ++n) {
-    let point = new Point(cellSize * radius, 0)
-      .rotate(n / group.units.length * 2 * Math.PI)
-      .add(midCell(group.position));
-    context.beginPath();
-    context.arc(point.x, point.y, unitSize * cellSize, 0, 2 * Math.PI);
-    context.fill();
-    context.closePath();
+  if (tile.units !== undefined) {
+    let radius = 0.3;
+    let unitSize = 0.08;
+    context.fillStyle = tile.player ? "#22A" : "#A22";
+    for (let n = 0; n  < tile.units.length; ++n) {
+      let point = new Point(cellSize * radius, 0)
+        .rotate(n / tile.units.length * 2 * Math.PI)
+        .add(midCell({x, y}));
+      context.beginPath();
+      context.arc(point.x, point.y, unitSize * cellSize, 0, 2 * Math.PI);
+      context.fill();
+      context.closePath();
+    }
   }
 }
 
-function drawGroupTargets(group) {
+function drawCommands(commands) {
   context.globalAlpha = 0.3;
   context.fillStyle = "yellow";
-  let groupTargets = commands.get(group.id);
-  if (!groupTargets)
-    return;
-  for (const target of groupTargets) {
-    let angle = target.angleTo(group.position);
-    let arrowPos = midCell(target.add(group.position).div(2));
-    context.shape(arrowPos, arrow, cellSize/8, angle);
-    context.fill();
+  for (const command of commands) {
+    let [origin, targets] = command;
+    for (const target of targets) {
+      let angle = target.angleTo(origin);
+      let arrowPos = midCell(target.add(origin).div(2));
+      context.shape(arrowPos, arrow, cellSize/8, angle);
+      context.fill();
+    }
   }
 }
 
@@ -61,9 +62,10 @@ function midCell(cell) {
 function draw() {
   context.globalAlpha = 1;
   fillCanvas(canvas, "#3557a0");
-  iterate2D(world.width, world.height, (x, y) => drawTile(x, y, world.map));
-  world.groups.forEach(drawGroup);
-  world.groups.forEach(drawGroupTargets);
+  let width = world.length;
+  let height = world[0].length;
+  iterate2D(width, height, (x, y) => drawTile(x, y, world));
+  drawCommands(commands);
 }
 
 function initCanvas() {
@@ -73,33 +75,40 @@ function initCanvas() {
     window.innerWidth * (1 - gap * 2),
     window.innerHeight * (1 - gap) - heading.offsetHeight);
 
-  cellSize = canvas.width / world.width;
+  cellSize = canvas.width / world.length;
   if (world !== undefined)
     draw(); 
 }
 
-function addCommand(group, target) {
+function addCommand(originPos, targetPos) {
+  let origin = world[originPos.x][originPos.y];
+  let target = world[targetPos.x][targetPos.y];
+
   // check the move is valid
-  if (group.player !== player || target.dist(group.position) !== 1)
+  if (origin.units.length == 0 ||
+      origin.player != player ||
+      originPos.dist(targetPos) !== 1)
     return;
 
   // give the new commands
-  if (!commands.has(group.id))
-    commands.set(group.id, []);
+  let commandIndex = commands.findIndex(c => eq(c[0], originPos));
+  if (commandIndex === -1)
+    commandIndex = commands.push([originPos, []]) - 1;
 
-  let groupTargets = commands.get(group.id);
-  let targetIndex = groupTargets.findIndex(t => eq(t, target));
+  let currentTargets = commands[commandIndex][1];
+  let targetIndex = currentTargets.findIndex(t => eq(t, targetPos));
+
   if (targetIndex !== -1) {
-    groupTargets.splice(targetIndex, 1);
+    currentTargets.splice(targetIndex, 1);
   } else {
-    if (groupTargets.length >= group.units.length)
-      groupTargets.splice(0, 1);
-    groupTargets.push(target);
+    if (currentTargets.length >= origin.units.length)
+      currentTargets.splice(0, 1);
+    currentTargets.push(targetPos);
   }
 
   // remove the commands entry if there are no targets left
-  if (!groupTargets.length)
-    commands.delete(group);
+  if (!currentTargets.length)
+    commands.splice(commandIndex, 1);
 
   draw();
 }
@@ -108,14 +117,17 @@ function sendCommands() {
   // send the commands to the server
   socket.emit("commands", Array.from(commands));
 
-  // reset the groups commands and update list
-  commands = new Map();
+  // reset the commands and update list
+  commands = []
 }
 
 function drag(mouse) {
-  let group = world.groups.find(g => mouse.down.floor().equals(g.position));
-  if (group !== undefined)
-    addCommand(group, mouse.up.floor());
+  addCommand(mouse.down.floor(), mouse.up.floor());
+}
+
+function loadWorld(newWorld) {
+  world = newWorld;
+  initCanvas();
 }
 
 canvas.addEventListener("mousedown", function mouseDown(e) {
@@ -132,8 +144,5 @@ canvas.addEventListener("mouseup", function mouseUp(e) {
 
 socket.on("reload", () => window.location.reload()); 
 socket.on("msg", msg => console.log(msg)); 
-socket.on("worldSend", newWorld => {
-  world = newWorld;
-  initCanvas();
-});
+socket.on("sendWorld", loadWorld);
 
