@@ -57,7 +57,7 @@ function mainPage(req, res) {
 
 function loadCommands(world, playerCommands) {
   // load the commands from the player messages
-  let commands = playerCommands
+  let commands = playerCommands;
   run(world, commands); //FIXME for real time
 }
 

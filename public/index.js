@@ -30,7 +30,6 @@ function drawTile(x, y, world) {
     let e = Math.ceil(Math.sqrt(tile.units.length));
     let m = Math.floor((e*e - tile.units.length) / 2);
 
-    let radius = tile.units.length == 1 ? 0 : 0.3;
     let unitSize = 0.08;
     context.fillStyle = tile.player ? "#22A" : "#A22";
     for (let n = m; n < tile.units.length + m; ++n) {
@@ -122,7 +121,7 @@ function sendCommands() {
   socket.emit("commands", Array.from(commands));
 
   // reset the commands and update list
-  commands = []
+  commands = [];
 }
 
 function drag(mouse) {
