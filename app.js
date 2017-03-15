@@ -6,7 +6,7 @@ var http = require("http").Server(app);
 var io = require("socket.io")(http);
 var simplex = require("simplex-noise");
 var Point = require("point-geometry");
-require('colors');
+var chalk = require('chalk');
 
 var autoreload = true;
 var port  = 4000;
@@ -94,21 +94,21 @@ function playerSession(socket) {
 }
 
 function startGame(game, player) {
-  console.log(player, "ready to start".grey);
+  console.log(player, chalk.grey("ready to start"));
   game.waitingOn.delete(player);
   if (game.waitingOn.size === 0)
     startTurn(game);
 }
 
 function startTurn(game) {
-  console.log(("\nstarting turn " + game.turnCount).italic.blue);
+  console.log(chalk.blue("\nstarting turn", game.turnCount));
   io.emit("startTurn", game.turnTime);
   game.waitingOn = new Set(game.players);
   gameTimeouts.set(game, setTimeout(endTurn, game.turnTime, game));
 }
 
 function endTurn(game) {
-  console.log(("ending turn "+game.turnCount).yellow);
+  console.log(chalk.yellow("ending turn", game.turnCount));
   game.waitingOn.forEach(player => {
     io.sockets.connected[player].emit("requestCommands");
   });
@@ -117,10 +117,10 @@ function endTurn(game) {
 function loadCommands(game, player, commands) {
   // load the commands from the player messages
   if (game.waitingOn.has(player)) {
-    console.log(player, (nCommands(commands) + " commands").magenta);
+    console.log(player, chalk.magenta(nCommands(commands), "commands"));
     game.commands = game.commands.concat(commands);
   } else {
-    console.warn(player, "duplicate commands ignored".bold.red);
+    console.warn(player, chalk.bold.red("duplicate commands ignored"));
   }
 
   game.waitingOn.delete(player);
@@ -131,8 +131,9 @@ function loadCommands(game, player, commands) {
 
 function run(game) {
   clearTimeout(gameTimeouts.get(game));
-  console.log(("running "+nCommands(game.commands)
-              +" commands for turn " + game.turnCount++).cyan);
+  console.log(chalk.cyan(
+    "running", nCommands(game.commands),
+    "commands for turn", game.turnCount++));
   game.commands.forEach(command => {
     let [originPosition, targetPositions] = command;
     let origin = game.world[originPosition.x][originPosition.y];
@@ -173,7 +174,7 @@ function findEmptyTiles(world) {
 
 function addPlayer(game, socket) {
   let player = socket.id;
-  console.log(player, "player connected".blue);
+  console.log(player, chalk.blue("player connected"));
   game.players.push(player);
   game.waitingOn.add(player);
   // start on random empty tile with 12 units (dev)
@@ -184,7 +185,7 @@ function addPlayer(game, socket) {
 }
 
 function removePlayer(game, player) {
-  console.log(player, "player disconnected".red);
+  console.log(player, chalk.red("player disconnected -"));
   game.players = game.players.filter(p => p !== player);
   game.waitingOn.delete(player);
   deletePlayerUnits(game.world, player);
