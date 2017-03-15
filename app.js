@@ -11,6 +11,7 @@ require('colors');
 var autoreload = true;
 var port  = 4000;
 var games = [];
+var gameTimeouts = new Map();
 
 function Game(w, h, turnTime) {
   console.log("Starting new game...");
@@ -103,10 +104,11 @@ function startTurn(game) {
   console.log(("\nstarting turn " + game.turnCount).italic.blue);
   io.emit("startTurn", game.turnTime);
   game.waitingOn = new Set(game.players);
-  setTimeout(requestCommands, game.turnTime, game);
+  gameTimeouts.set(game, setTimeout(endTurn, game.turnTime, game));
 }
 
-function requestCommands(game) {
+function endTurn(game) {
+  console.log(("ending turn "+game.turnCount).yellow);
   game.waitingOn.forEach(player => {
     io.sockets.connected[player].emit("requestCommands");
   });
@@ -114,19 +116,23 @@ function requestCommands(game) {
 
 function loadCommands(game, player, commands) {
   // load the commands from the player messages
-  console.log(player, "commands received".green);
-  if (game.waitingOn.has(player))
+  if (game.waitingOn.has(player)) {
+    console.log(player, (nCommands(commands) + " commands").magenta);
     game.commands = game.commands.concat(commands);
-  else
-    console.warn("  duplicate commands".bold.red);
+  } else {
+    console.warn(player, "duplicate commands ignored".bold.red);
+  }
 
   game.waitingOn.delete(player);
-  if (game.waitingOn.size === 0)
+  if (game.waitingOn.size === 0) {
     run(game);
+  }
 }
 
 function run(game) {
-  console.log(("executing turn " + game.turnCount++).cyan);
+  clearTimeout(gameTimeouts.get(game));
+  console.log(("running "+nCommands(game.commands)
+              +" commands for turn " + game.turnCount++).cyan);
   game.commands.forEach(command => {
     let [originPosition, targetPositions] = command;
     let origin = game.world[originPosition.x][originPosition.y];
@@ -183,6 +189,10 @@ function removePlayer(game, player) {
   game.waitingOn.delete(player);
   deletePlayerUnits(game.world, player);
   io.emit("sendState", game);
+}
+
+function nCommands(commands) {
+    return commands.reduce((acc, val) => acc + val[1].length, 0);
 }
 
 // server init
