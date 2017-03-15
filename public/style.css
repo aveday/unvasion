@@ -23,3 +23,16 @@ canvas {
   margin-right: auto;
   display: block;
 }
+
+#progressBar {
+  width: 0px;
+  height: 10px;
+  background-color: yellow;
+}
+
+#progressBorder {
+  margin-left: auto;
+  margin-right: auto;
+  background-color: grey;
+
+}

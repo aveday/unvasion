@@ -6,9 +6,12 @@ var http = require("http").Server(app);
 var io = require("socket.io")(http);
 var simplex = require("simplex-noise");
 var Point = require("point-geometry");
+
 var autoreload = true;
 var port  = 4000;
 var turnTime = 5000;
+var commands = [];
+var players = [];
 
 var newId = (() => {
   let nextId = 0;
@@ -58,7 +61,7 @@ function mainPage(req, res) {
 
 function loadCommands(world, playerCommands) {
   // load the commands from the player messages
-  let commands = playerCommands;
+  commands = commands.concat(playerCommands);
   run(world, commands); //FIXME for real time
 }
 
@@ -77,14 +80,15 @@ function run(world, commands) {
     }
   });
 
+  commands = [];
   io.emit("sendWorld", world); // FIXME to just send update
 }
 
 function requestCommands() {
   io.emit("getCommands");
   io.emit("startTurn", turnTime);
-
 }
+
 function playerSession(socket) {
   if (autoreload === true) {
     autoreload = false;
@@ -92,6 +96,7 @@ function playerSession(socket) {
     return;
   }
 
+  console.log(socket);
   console.log("Player connected.\nGenerating world...");
   let world = genWorld(4, 4);
 

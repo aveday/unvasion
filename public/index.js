@@ -2,6 +2,8 @@
 
 window.addEventListener("resize", initCanvas, false);
 let canvas = document.getElementById("canvas");
+let progressBar = document.getElementById("progressBar");
+let progressBorder = document.getElementById("progressBorder");
 let heading = document.getElementById("heading");
 let context = canvas.getContext("2d");
 let socket = io();
@@ -81,6 +83,8 @@ function initCanvas() {
     window.innerWidth * (1 - gap * 2),
     window.innerHeight * (1 - gap) - heading.offsetHeight);
 
+  progressBorder.style.width = canvas.width + "px";
+
   cellSize = canvas.width / world.length;
   if (world !== undefined)
     draw(); 
@@ -134,23 +138,16 @@ function loadWorld(newWorld) {
   initCanvas();
 }
 
-function updateTime() {
-  //FIXME math progress bar continuous path
-  time.passed = new Date().getTime() - time.start;
-  context.lineWidth = 5;
-  context.strokeStyle = "yellow";
-  context.beginPath();
-  context.moveTo(0,0);
-  context.lineTo(time.passed / time.turn * canvas.width, 0);
-  context.stroke();
-  context.closePath();
-}
-
 function startTurn(turnTime) {
+  console.log("start");
+  progressBar.style.width = "0%";
+  progressBar.style.transition = "width 0s";
+  progressBar.offsetLeft; // hack to split up transition properties
+  progressBar.style.transition = "width " + turnTime + "ms linear";
+  progressBar.style.width = "100%";
+
   clearInterval(time.interval);
-  time.turn = turnTime;
   time.start = new Date().getTime();
-  time.interval = setInterval(updateTime, 100);
 }
 
 
