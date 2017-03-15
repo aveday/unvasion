@@ -7,8 +7,12 @@
   text-align: center;
 }
 
-h1, h2, h3, p {
-  padding: 1em;
+header { padding: 1em; }
+h3 { margin: 0.3em; }
+
+button {
+  background-color: grey;
+  padding: 0.2em;
 }
 
 html, body {

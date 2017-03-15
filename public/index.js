@@ -2,18 +2,26 @@
 
 window.addEventListener("resize", initCanvas, false);
 let canvas = document.getElementById("canvas");
-let progressBar = document.getElementById("progressBar");
-let progressBorder = document.getElementById("progressBorder");
-let heading = document.getElementById("heading");
+let panel = {
+  header: document.getElementsByTagName("header")[0],
+  progressBar: document.getElementById("progressBar"),
+  progressBorder: document.getElementById("progressBorder"),
+  playerCount: document.getElementById("playerCount"),
+};
+
+//let playerColors = ["#3A3232", "#D83018", "#F07848", "#FDFCCE", "#C0D8D8"];
+let playerColors = ["blue", "red"];
+
 let context = canvas.getContext("2d");
 let socket = io();
 
 let player = 0;
+let playerColor = "blue";
 let cellSize;
 let world = {};
+let players = [];
 let commands = [];
 let mouse = {};
-let time = {};
 
 function drawTile(x, y, world) {
   context.globalAlpha = 1;
@@ -30,12 +38,15 @@ function drawTile(x, y, world) {
   }
 
   context.lineWidth = 0;
-  if (tile.units !== undefined) {
+  if (tile.units.length > 0) {
+    let playerIndex = players.findIndex(p => p === tile.player);
+    let playerColor = playerColors[playerIndex % playerColors.length];
+    context.fillStyle = playerColor;
+
     let e = Math.ceil(Math.sqrt(tile.units.length));
     let m = Math.floor((e*e - tile.units.length) / 2);
 
     let unitSize = 0.08;
-    context.fillStyle = tile.player ? "#22A" : "#A22";
     for (let n = m; n < tile.units.length + m; ++n) {
       let ex = X + (Math.floor(n / e) + 0.5)/e *  cellSize;
       let ey = Y + (n % e + 0.5)/e *  cellSize;
@@ -81,9 +92,9 @@ function initCanvas() {
   let gap = 0.05;
   canvas.width = canvas.height = Math.min(
     window.innerWidth * (1 - gap * 2),
-    window.innerHeight * (1 - gap) - heading.offsetHeight);
+    window.innerHeight * (1 - gap) - panel.header.offsetHeight);
 
-  progressBorder.style.width = canvas.width + "px";
+  panel.progressBorder.style.width = canvas.width + "px";
 
   cellSize = canvas.width / world.length;
   if (world !== undefined)
@@ -125,7 +136,7 @@ function addCommand(originPos, targetPos) {
 
 function sendCommands() {
   // send the commands to the server
-  socket.emit("commands", commands);
+  socket.emit("sendCommands", commands);
   commands = [];
 }
 
@@ -133,21 +144,24 @@ function drag(mouse) {
   addCommand(mouse.down.floor(), mouse.up.floor());
 }
 
-function loadWorld(newWorld) {
-  world = newWorld;
+function loadState(game) {
+  commands = [];
+  players = game.players;
+  world = game.world;
+  panel.playerCount.innerHTML = players.length;
   initCanvas();
 }
 
-function startTurn(turnTime) {
-  console.log("start");
-  progressBar.style.width = "0%";
-  progressBar.style.transition = "width 0s";
-  progressBar.offsetLeft; // hack to split up transition properties
-  progressBar.style.transition = "width " + turnTime + "ms linear";
-  progressBar.style.width = "100%";
+progressBar.start = function(turnTime) {
+  this.style.width = "0%";
+  this.style.transition = "width 0s";
+  this.offsetLeft; // hack to split up transition properties
+  this.style.transition = "width " + turnTime + "ms linear";
+  this.style.width = "100%";
+}
 
-  clearInterval(time.interval);
-  time.start = new Date().getTime();
+function startTurn(turnTime) {
+  progressBar.start(turnTime);
 }
 
 canvas.addEventListener("mousedown", function mouseDown(e) {
@@ -164,6 +178,7 @@ canvas.addEventListener("mouseup", function mouseUp(e) {
 
 socket.on("reload", () => window.location.reload()); 
 socket.on("msg", msg => console.log(msg)); 
-socket.on("sendWorld", loadWorld);
+socket.on("sendPlayerId", id => player = id);
+socket.on("sendState", loadState);
 socket.on("startTurn", startTurn);
 socket.on("requestCommands", sendCommands);

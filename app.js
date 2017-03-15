@@ -6,24 +6,36 @@ var http = require("http").Server(app);
 var io = require("socket.io")(http);
 var simplex = require("simplex-noise");
 var Point = require("point-geometry");
+require('colors');
 
 var autoreload = true;
 var port  = 4000;
-var turnTime = 5000;
-var commands = [];
-var players = [];
+var games = [];
 
-var newId = (() => {
-  let nextId = 0;
-  return () => ++nextId;
-})();
-
-function Units(n) {
-  return Array(n).fill(0).map(newId);
+function Game(w, h, turnTime) {
+  console.log("Starting new game...");
+  return {
+    world: World(w, h),
+    turnTime,
+    players: [],
+    waitingOn: new Set(),
+    commands: [],
+    nextId: 0,
+    turnCount: 0,
+  };
 }
 
-function genWorld(width, height) {
+function World(width, height) {
+  console.log("Creating world...");
   let world = [];
+  world.nextId = 0;
+
+  world.addUnits = function(tile, player, n) {
+    tile.player = player;
+    for (let i = 0; i < n; i++)
+      tile.units.push(world.nextId++);
+    return tile.units;
+  }
 
   let noise = new simplex(Math.random);
   let offset = 0.3;
@@ -43,11 +55,6 @@ function genWorld(width, height) {
     world.push(row);
   }
 
-  world[0][0].units = Units(15);
-  world[0][0].player = 0;
-  world[3][1].units = Units(3);
-  world[3][1].player = 1;
-
   return world;
 }
 
@@ -59,55 +66,123 @@ function mainPage(req, res) {
   res.render("public/index.html", handleError);
 }
 
-function loadCommands(world, playerCommands) {
-  // load the commands from the player messages
-  commands = commands.concat(playerCommands);
-  run(world, commands); //FIXME for real time
-}
-
-function run(world, commands) {
-
-  commands.forEach(function (command) {
-    let [originPosition, targetPositions] = command;
-    let origin = world[originPosition.x][originPosition.y];
-
-    while (targetPositions.length > 0) {
-      let n = Math.floor(origin.units.length / targetPositions.length);
-      let targetP = targetPositions.pop();
-      let target = world[targetP.x][targetP.y];
-      target.units = target.units.concat(origin.units.splice(0, n));
-      target.player = origin.player;
-    }
-  });
-
-  commands = [];
-  io.emit("sendWorld", world); // FIXME to just send update
-}
-
-function requestCommands() {
-  io.emit("requestCommands");
-  io.emit("startTurn", turnTime);
-}
-
 function playerSession(socket) {
+  // tell client to refresh on file changes (dev)
   if (autoreload === true) {
     autoreload = false;
     io.emit("reload");
     return;
   }
+  // start a new game session if there aren't any
+  if (games.length === 0)
+    games.push(Game(4, 4, 4000));
+  let game = games[0];
 
-  console.log(socket);
-  console.log("Player connected.\nGenerating world...");
-  let world = genWorld(4, 4);
-
+  // add the player
+  let player = addPlayer(game, socket);
   io.emit("msg", "Connected to server");
-  io.emit("sendWorld", world);
 
-  io.emit("startTurn", turnTime);
-  setInterval(requestCommands, turnTime);
+  socket.emit("sendPlayerId", player);
+  io.emit("sendState", game);
 
-  socket.on("commands", commands => loadCommands(world, commands));
+  socket.on("ready", () => startGame(game, player));
+  socket.on("sendCommands", commands => loadCommands(game, player, commands));
+
   socket.on("msg", msg => console.log(msg));
+  socket.on("disconnect", () => removePlayer(game, player));
+}
+
+function startGame(game, player) {
+  console.log(player, "ready to start".grey);
+  game.waitingOn.delete(player);
+  if (game.waitingOn.size === 0)
+    startTurn(game);
+}
+
+function startTurn(game) {
+  console.log(("starting turn " + game.turnCount).italic.blue);
+  io.emit("startTurn", game.turnTime);
+  game.waitingOn = new Set(game.players);
+  setTimeout(requestCommands, game.turnTime, game);
+}
+
+function requestCommands(game) {
+  game.waitingOn.forEach(player => {
+    io.sockets.connected[player].emit("requestCommands");
+  });
+}
+
+function loadCommands(game, player, commands) {
+  // load the commands from the player messages
+  console.log(player, "commands received".green);
+  if (game.waitingOn.has(player))
+    game.commands = game.commands.concat(commands);
+  else
+    console.warn("  duplicate commands".bold.red);
+
+  game.waitingOn.delete(player);
+  if (game.waitingOn.size === 0)
+    run(game);
+}
+
+function run(game) {
+  console.log(("executing turn" + game.turnCount++).magenta);
+  game.commands.forEach(command => {
+    let [originPosition, targetPositions] = command;
+    let origin = game.world[originPosition.x][originPosition.y];
+
+    while (targetPositions.length > 0) {
+      let n = Math.floor(origin.units.length / targetPositions.length);
+      let targetP = targetPositions.pop();
+      let target = game.world[targetP.x][targetP.y];
+      target.units = target.units.concat(origin.units.splice(0, n));
+      target.player = origin.player;
+    }
+  });
+
+  // reset commands and send the updates to all the players
+  game.commands = [];
+  io.emit("sendState", game); // FIXME to just send update
+
+  startTurn(game);
+}
+
+function deletePlayerUnits(region, player) {
+  if (region.hasOwnProperty("length")) {
+    region.forEach(r => deletePlayerUnits(r, player));
+  } else if (region.player === player) {
+    region.units = [];
+    region.player = undefined;
+  }
+}
+
+function findEmptyTiles(world) {
+  let emptyTiles = []
+  world.forEach(row => {
+    let empty = row.filter(tile => tile.units.length === 0)
+    emptyTiles = emptyTiles.concat(empty)
+  });
+  return emptyTiles;
+}
+
+function addPlayer(game, socket) {
+  let player = socket.id;
+  console.log(player, "player connected".blue);
+  game.players.push(player);
+  game.waitingOn.add(player);
+  // start on random empty tile with 12 units (dev)
+  let empty = findEmptyTiles(game.world);
+  let emptyTile = empty[Math.floor(Math.random() * empty.length)];
+  game.world.addUnits(emptyTile, player, 12);
+  return player;
+}
+
+function removePlayer(game, player) {
+  console.log(player, "player disconnected".red);
+  game.players = game.players.filter(p => p !== player);
+  game.waitingOn.delete(player);
+  deletePlayerUnits(game.world, player);
+  io.emit("sendState", game);
 }
 
 // server init
@@ -115,5 +190,5 @@ app.use(express.static(__dirname + "/public"));
 app.get("/", mainPage);
 io.on("connection", playerSession);
 
-http.listen(port, () => console.log("listening on port", port));
+http.listen(port, () => console.log("Server started on port", port));
 

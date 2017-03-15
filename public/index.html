@@ -4,9 +4,13 @@
 <script src="/socket.io/socket.io.js"></script>
 <link rel="stylesheet" href="style.css">
 
-<h3 id="heading" onclick="sendCommands()">
-  Unvasion v0.0.1
-</h3>
+<header>
+  <h3 onclick="sendCommands()"> Unvasion v0.0.1 </h3>
+  <p>
+    Players: <span id="playerCount">0</span> &emsp;
+    <button type="button" onclick="socket.emit('ready')"> start game</button>
+  </p>
+</header>
 
 <div id="progressBorder">
   <div id="progressBar"></div>
