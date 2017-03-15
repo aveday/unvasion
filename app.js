@@ -100,7 +100,7 @@ function startGame(game, player) {
 }
 
 function startTurn(game) {
-  console.log(("starting turn " + game.turnCount).italic.blue);
+  console.log(("\nstarting turn " + game.turnCount).italic.blue);
   io.emit("startTurn", game.turnTime);
   game.waitingOn = new Set(game.players);
   setTimeout(requestCommands, game.turnTime, game);
@@ -126,7 +126,7 @@ function loadCommands(game, player, commands) {
 }
 
 function run(game) {
-  console.log(("executing turn" + game.turnCount++).magenta);
+  console.log(("executing turn " + game.turnCount++).cyan);
   game.commands.forEach(command => {
     let [originPosition, targetPositions] = command;
     let origin = game.world[originPosition.x][originPosition.y];
