@@ -150,7 +150,6 @@ function startTurn(turnTime) {
   time.start = new Date().getTime();
 }
 
-
 canvas.addEventListener("mousedown", function mouseDown(e) {
   mouse.down = elementCoords(canvas, e.pageX, e.pageY).div(cellSize);
 });
@@ -167,4 +166,4 @@ socket.on("reload", () => window.location.reload());
 socket.on("msg", msg => console.log(msg)); 
 socket.on("sendWorld", loadWorld);
 socket.on("startTurn", startTurn);
-socket.on("getCommands", sendCommands);
+socket.on("requestCommands", sendCommands);

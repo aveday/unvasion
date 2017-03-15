@@ -85,7 +85,7 @@ function run(world, commands) {
 }
 
 function requestCommands() {
-  io.emit("getCommands");
+  io.emit("requestCommands");
   io.emit("startTurn", turnTime);
 }
 
