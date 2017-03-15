@@ -5,8 +5,7 @@ var app = express();
 var http = require("http").Server(app);
 var io = require("socket.io")(http);
 var simplex = require("simplex-noise");
-var Point = require("point-geometry");
-var chalk = require('chalk');
+var chalk = require("chalk");
 
 var autoreload = true;
 var port  = 4000;
@@ -36,7 +35,7 @@ function World(width, height) {
     for (let i = 0; i < n; i++)
       tile.units.push(world.nextId++);
     return tile.units;
-  }
+  };
 
   let noise = new simplex(Math.random);
   let offset = 0.3;
@@ -164,10 +163,10 @@ function deletePlayerUnits(region, player) {
 }
 
 function findEmptyTiles(world) {
-  let emptyTiles = []
+  let emptyTiles = [];
   world.forEach(row => {
-    let empty = row.filter(tile => tile.units.length === 0)
-    emptyTiles = emptyTiles.concat(empty)
+    let empty = row.filter(tile => tile.units.length === 0);
+    emptyTiles = emptyTiles.concat(empty);
   });
   return emptyTiles;
 }
@@ -193,7 +192,7 @@ function removePlayer(game, player) {
 }
 
 function nCommands(commands) {
-    return commands.reduce((acc, val) => acc + val[1].length, 0);
+  return commands.reduce((acc, val) => acc + val[1].length, 0);
 }
 
 // server init

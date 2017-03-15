@@ -16,7 +16,6 @@ let context = canvas.getContext("2d");
 let socket = io();
 
 let player = 0;
-let playerColor = "blue";
 let cellSize;
 let world = {};
 let players = [];
@@ -158,7 +157,7 @@ progressBar.start = function(turnTime) {
   this.offsetLeft; // hack to split up transition properties
   this.style.transition = "width " + turnTime + "ms linear";
   this.style.width = "100%";
-}
+};
 
 function startTurn(turnTime) {
   progressBar.start(turnTime);
