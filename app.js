@@ -8,6 +8,7 @@ var simplex = require("simplex-noise");
 var Point = require("point-geometry");
 var autoreload = true;
 var port  = 4000;
+var turnTime = 5000;
 
 var newId = (() => {
   let nextId = 0;
@@ -79,6 +80,11 @@ function run(world, commands) {
   io.emit("sendWorld", world); // FIXME to just send update
 }
 
+function requestCommands() {
+  io.emit("getCommands");
+  io.emit("startTurn", turnTime);
+
+}
 function playerSession(socket) {
   if (autoreload === true) {
     autoreload = false;
@@ -88,8 +94,13 @@ function playerSession(socket) {
 
   console.log("Player connected.\nGenerating world...");
   let world = genWorld(4, 4);
+
   io.emit("msg", "Connected to server");
   io.emit("sendWorld", world);
+
+  io.emit("startTurn", turnTime);
+  setInterval(requestCommands, turnTime);
+
   socket.on("commands", commands => loadCommands(world, commands));
   socket.on("msg", msg => console.log(msg));
 }

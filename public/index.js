@@ -11,6 +11,7 @@ let cellSize;
 let world = {};
 let commands = [];
 let mouse = {};
+let time = {};
 
 function drawTile(x, y, world) {
   context.globalAlpha = 1;
@@ -26,6 +27,7 @@ function drawTile(x, y, world) {
     context.strokeRect(X, Y, E, E);
   }
 
+  context.lineWidth = 0;
   if (tile.units !== undefined) {
     let e = Math.ceil(Math.sqrt(tile.units.length));
     let m = Math.floor((e*e - tile.units.length) / 2);
@@ -44,6 +46,7 @@ function drawTile(x, y, world) {
 }
 
 function drawCommands(commands) {
+  context.lineWidth = 0;
   context.globalAlpha = 0.3;
   context.fillStyle = "yellow";
   for (let command of commands) {
@@ -133,6 +136,28 @@ function loadWorld(newWorld) {
   initCanvas();
 }
 
+
+
+function updateTime() {
+  //FIXME math progress bar continuous path
+  time.passed = new Date().getTime() - time.start;
+  context.lineWidth = 5;
+  context.strokeStyle = "yellow";
+  context.beginPath();
+  context.moveTo(0,0);
+  context.lineTo(time.passed / time.turn * canvas.width, 0);
+  context.stroke();
+  context.closePath();
+}
+
+function startTurn(turnTime) {
+  clearInterval(time.interval);
+  time.turn = turnTime;
+  time.start = new Date().getTime();
+  time.interval = setInterval(updateTime, 100);
+}
+
+
 canvas.addEventListener("mousedown", function mouseDown(e) {
   mouse.down = elementCoords(canvas, e.pageX, e.pageY).div(cellSize);
 });
@@ -148,4 +173,5 @@ canvas.addEventListener("mouseup", function mouseUp(e) {
 socket.on("reload", () => window.location.reload()); 
 socket.on("msg", msg => console.log(msg)); 
 socket.on("sendWorld", loadWorld);
-
+socket.on("startTurn", startTurn);
+socket.on("getCommands", sendCommands);
