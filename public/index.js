@@ -121,9 +121,7 @@ function addCommand(originPos, targetPos) {
 
 function sendCommands() {
   // send the commands to the server
-  socket.emit("commands", Array.from(commands));
-
-  // reset the commands and update list
+  socket.emit("commands", commands);
   commands = [];
 }
 
@@ -135,8 +133,6 @@ function loadWorld(newWorld) {
   world = newWorld;
   initCanvas();
 }
-
-
 
 function updateTime() {
   //FIXME math progress bar continuous path
