@@ -6,6 +6,7 @@ var http = require("http").Server(app);
 var io = require("socket.io")(http);
 var simplex = require("simplex-noise");
 var chalk = require("chalk");
+var evenChunks = require("even-chunks");
 
 var autoreload = true;
 var port  = 4000;
@@ -29,7 +30,6 @@ function Game(w, h, turnTime) {
 function setUnits(world, tile, player, n) {
   tile.player = player;
   tile.units = Array.from({length: n}, () => world.nextId++);
-  console.log(tile.units);
 }
 
 function World(width, height) {
@@ -38,7 +38,7 @@ function World(width, height) {
   world.nextId = 0;
 
   let noise = new simplex(Math.random);
-  let offset = 0.3;
+  let offset = 0.6;
   let octaveSettings = [
     {scale: 0.20, amplitude: 0.8},
     {scale: 0.03, amplitude: 1.0},
@@ -46,7 +46,7 @@ function World(width, height) {
 
   for (let x = 0; x < width; ++x) {
     let row = [];
-    for (let y = 0;y < height; ++y) {
+    for (let y = 0; y < height; ++y) {
       let tile = {terrain: offset, units: [], player: undefined};
       for (let n of octaveSettings)
         tile.terrain += n.amplitude * noise.noise2D(x * n.scale, y * n.scale);
@@ -154,8 +154,19 @@ function updateTargets(command) {
 
 function updateTile(tile) {
   tile.units = Array.from(tile.nextUnits);
-  if (tile.units.length === 0)
-    tile.player = undefined;
+  tile.player = tile.units.length > 0 ? tile.nextPlayer : undefined;
+}
+
+function runMovements(command) {
+  let groups = evenChunks(command.origin.units, command.targets.length);
+  console.log(command.targets);
+
+  command.origin.nextUnits = command.origin.nextUnits
+    .filter(u => !command.origin.units.includes(u));
+  command.targets.forEach((target, i) => {
+    target.nextUnits = target.nextUnits.concat(groups[i]);
+    target.nextPlayer = command.origin.player;
+  });
 }
 
 function run(game) {
@@ -167,7 +178,8 @@ function run(game) {
   // initialise the next game state
   let allTiles = flatten(game.world);
   let occupied = allTiles.filter(tile => tile.units.length > 0);
-  occupied.forEach(tile => tile.nextUnits = Array.from(tile.units));
+  allTiles.forEach(tile => tile.nextUnits = Array.from(tile.units));
+  allTiles.forEach(tile => tile.nextPlayer = tile.player);
 
   // execute interactions
   game.commands.forEach(runInteractions);
@@ -175,15 +187,8 @@ function run(game) {
   occupied.forEach(updateTile);
   
   // execute movement
-  for (let command of game.commands) {
-    let {origin, targets} = command;
-    while (targets.length > 0) {
-      let n = Math.floor(origin.units.length / targets.length);
-      let target = targets.pop();
-      target.units = target.units.concat(origin.units.splice(0, n));
-      target.player = origin.player;
-    }
-  }
+  game.commands.forEach(runMovements);
+  allTiles.forEach(updateTile);
 
   // reset commands and send the updates to all the players
   game.commands = [];
