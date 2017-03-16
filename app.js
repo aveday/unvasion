@@ -8,6 +8,7 @@ var simplex = require("simplex-noise");
 var chalk = require("chalk");
 var evenChunks = require("even-chunks");
 
+var unitCap = 25;
 var autoreload = true;
 var port  = 4000;
 var games = [];
@@ -21,7 +22,6 @@ function Game(w, h, turnTime) {
     players: [],
     waitingOn: new Set(),
     commands: [],
-    commandsMap: new Map(),
     nextId: 0,
     turnCount: 0,
   };
@@ -47,7 +47,7 @@ function World(width, height) {
   for (let x = 0; x < width; ++x) {
     let row = [];
     for (let y = 0; y < height; ++y) {
-      let tile = {terrain: offset, units: [], player: undefined};
+      let tile = {terrain: offset, units: [], targets: [], player: undefined};
       for (let n of octaveSettings)
         tile.terrain += n.amplitude * noise.noise2D(x * n.scale, y * n.scale);
       row.push(tile);
@@ -116,39 +116,33 @@ function endTurn(game) {
 function loadCommands(game, player, commands) {
   // TODO properly validate commadns (eg: targets <= units.length)
   // load the commands from the player messages
-  if (game.waitingOn.has(player)) {
-    console.log(player, chalk.magenta(nCommands(commands), "commands"));
-    // covert tile positions to tile references
-    for (let command of commands) {
-      let origin = game.world[command[0].x][command[0].y];
-      let targets = command[1].map(t => game.world[t.x][t.y]);
-      game.commandsMap.set(origin, targets);
-      game.commands.push({origin, targets});//FIXME do we need both?
-    }
-  } else {
+  console.log(player, chalk.magenta(nCommands(commands), "commands"));
+  if (game.waitingOn.has(player))
+    for (let [tilePos, targetsPos] of commands)
+      game.world[tilePos.x][tilePos.y]
+          .targets = targetsPos.map(t => game.world[t.x][t.y]);
+  else
     console.warn(player, chalk.bold.red("duplicate commands ignored"));
-  }
 
   game.waitingOn.delete(player);
-  if (game.waitingOn.size === 0) {
+  if (game.waitingOn.size === 0)
     run(game);
-  }
 }
 
-function runInteractions(command) {
-  let p = Math.ceil(command.origin.units.length / command.targets.length / 2);
-  command.targets.forEach(target => {
-    if (target.units.length > 0 && target.player !== command.origin.player)
+function runInteractions(tile) {
+  let p = Math.ceil(tile.units.length / tile.targets.length / 2);
+  tile.targets.forEach(target => {
+    if (target.units.length > 0 && target.player !== tile.player)
       target.nextUnits.splice(0, p);
   });
 }
 
-function updateTargets(command) {
-  command.targets = command.targets.map(target => {
+function updateTargets(tile) {
+  tile.targets = tile.targets.map(target => {
     let targetInvalid =
         target.terrain < 0
-     || target.units.length > 0 && target.player !== command.origin.player;
-    return targetInvalid ? command.origin : target;
+     || target.units.length > 0 && target.player !== tile.player;
+    return targetInvalid ? tile : target;
   });
 }
 
@@ -157,22 +151,21 @@ function updateTile(tile) {
   tile.player = tile.units.length > 0 ? tile.nextPlayer : undefined;
 }
 
-function runMovements(command) {
-  let groups = evenChunks(command.origin.units, command.targets.length);
-  console.log(command.targets);
+function runMovements(tile) {
+  if (tile.targets.length === 0) tile.targets = [tile];
+  let groups = evenChunks(tile.units, tile.targets.length);
 
-  command.origin.nextUnits = command.origin.nextUnits
-    .filter(u => !command.origin.units.includes(u));
-  command.targets.forEach((target, i) => {
+  tile.nextUnits = tile.nextUnits.filter(u => !tile.units.includes(u));
+  tile.targets.forEach((target, i) => {
     target.nextUnits = target.nextUnits.concat(groups[i]);
-    target.nextPlayer = command.origin.player;
+    target.nextPlayer = tile.player;
   });
 }
 
 function run(game) {
   clearTimeout(gameTimeouts.get(game));
-  console.log(chalk.cyan(
-    "running", //nCommands(game.commands),FIXME differring command format
+  console.log(chalk.cyan( //FIXME differring command format (add tileIds)
+    "running", //nCommands(game.commands),
     "commands for turn", game.turnCount++));
 
   // initialise the next game state
@@ -182,16 +175,16 @@ function run(game) {
   allTiles.forEach(tile => tile.nextPlayer = tile.player);
 
   // execute interactions
-  game.commands.forEach(runInteractions);
-  game.commands.forEach(updateTargets);
+  occupied.forEach(runInteractions);
+  occupied.forEach(updateTargets);
   occupied.forEach(updateTile);
-  
+
   // execute movement
-  game.commands.forEach(runMovements);
+  occupied.forEach(runMovements);
   allTiles.forEach(updateTile);
 
   // reset commands and send the updates to all the players
-  game.commands = [];
+  allTiles.forEach(tile => tile.targets = []);
   io.emit("sendState", game); // FIXME to just send update
 
   startTurn(game);
