@@ -4,9 +4,12 @@ var express = require("express");
 var app = express();
 var http = require("http").Server(app);
 var io = require("socket.io")(http);
-var simplex = require("simplex-noise");
 var chalk = require("chalk");
 var evenChunks = require("even-chunks");
+var Alea = require("alea");
+var SimplexNoise = require("simplex-noise");
+
+var noise = new SimplexNoise(new Alea(0));
 
 var unitCap = 25;
 var autoreload = true;
@@ -14,10 +17,28 @@ var port  = 4000;
 var games = [];
 var gameTimeouts = new Map();
 
-function Game(w, h, turnTime) {
+var mapDef = {
+  zGen: simplexGen,
+  seed: 4,
+  width: 4,
+  height: 4,
+};
+
+function simplexGen(x, y, seed) {
+  let z = 1.3;
+  let octaves = [
+    {scale: 0.20, amplitude: 0.8},
+    {scale: 0.03, amplitude: 1.0},
+  ];
+  for (let n of octaves)
+    z += n.amplitude * noise.noise3D(x * n.scale, y * n.scale, seed);
+  return z;
+}
+
+function Game(mapDef, turnTime) {
   console.log("Starting new game...");
   return {
-    world: World(w, h),
+    world: World(mapDef),
     turnTime,
     players: [],
     waitingOn: new Set(),
@@ -27,35 +48,23 @@ function Game(w, h, turnTime) {
   };
 }
 
-function setUnits(world, tile, player, n) {
-  tile.player = player;
-  tile.units = Array.from({length: n}, () => world.nextId++);
+function Tile(terrain) {
+  return {
+    terrain, player: undefined,
+    units: [], targets: [],
+  };
 }
 
-function World(width, height) {
+function setUnits(game, tile, player, n) {
+  tile.player = player;
+  tile.units = Array.from({length: n}, () => game.nextId++);
+}
+
+function World(mapDef) {
   console.log("Creating world...");
-  let world = [];
-  world.nextId = 0;
-
-  let noise = new simplex(Math.random);
-  let offset = 0.6;
-  let octaveSettings = [
-    {scale: 0.20, amplitude: 0.8},
-    {scale: 0.03, amplitude: 1.0},
-  ];
-
-  for (let x = 0; x < width; ++x) {
-    let row = [];
-    for (let y = 0; y < height; ++y) {
-      let tile = {terrain: offset, units: [], targets: [], player: undefined};
-      for (let n of octaveSettings)
-        tile.terrain += n.amplitude * noise.noise2D(x * n.scale, y * n.scale);
-      row.push(tile);
-    }
-    world.push(row);
-  }
-
-  return world;
+  return Array.from(new Array(mapDef.width),
+    (v, x) => Array.from(new Array(mapDef.height),
+    (v, y) => Tile(mapDef.zGen(x, y, mapDef.seed))));
 }
 
 function handleError(err, html) {
@@ -75,7 +84,7 @@ function playerSession(socket) {
   }
   // start a new game session if there aren't any
   if (games.length === 0)
-    games.push(Game(4, 4, 4000));
+    games.push(Game(mapDef, 4000));
   let game = games[0];
 
   // add the player
@@ -217,7 +226,7 @@ function addPlayer(game, socket) {
   // start on random empty tile with 12 units (dev)
   let empty = findEmptyTiles(game.world);
   let emptyTile = empty[Math.floor(Math.random() * empty.length)];
-  setUnits(game.world, emptyTile, player, 12);
+  setUnits(game, emptyTile, player, 12);
   return player;
 }
 
