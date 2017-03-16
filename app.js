@@ -20,6 +20,7 @@ function Game(w, h, turnTime) {
     players: [],
     waitingOn: new Set(),
     commands: [],
+    commandsMap: new Map(),
     nextId: 0,
     turnCount: 0,
   };
@@ -114,10 +115,17 @@ function endTurn(game) {
 }
 
 function loadCommands(game, player, commands) {
+  // TODO properly validate commadns (eg: targets <= units.length)
   // load the commands from the player messages
   if (game.waitingOn.has(player)) {
     console.log(player, chalk.magenta(nCommands(commands), "commands"));
-    game.commands = game.commands.concat(commands);
+    // covert tile positions to tile references
+    for (let command of commands) {
+      let origin = game.world[command[0].x][command[0].y];
+      let targets = command[1].map(t => game.world[t.x][t.y]);
+      game.commandsMap.set(origin, targets);
+      game.commands.push({origin, targets});//FIXME do we need both?
+    }
   } else {
     console.warn(player, chalk.bold.red("duplicate commands ignored"));
   }
@@ -128,23 +136,56 @@ function loadCommands(game, player, commands) {
   }
 }
 
+function blocked(command, target) {
+  return target.terrain < 0
+      || target.units.length > 0 && target.player !== command.origin.player;
+}
+
+function interact(command, target) {
+  if (target.units.length == 0)
+    return;
+  // attack
+  if (target.player !== command.origin.player)
+    target.nextUnits.splice(0, damage(command));
+}
+
+function damage(command) {
+  let damage = command.origin.units.length / 2 / command.targets.length;
+  return Math.ceil(damage);
+}
+
 function run(game) {
   clearTimeout(gameTimeouts.get(game));
   console.log(chalk.cyan(
-    "running", nCommands(game.commands),
+    "running", //nCommands(game.commands),FIXME differring command format
     "commands for turn", game.turnCount++));
-  game.commands.forEach(command => {
-    let [originPosition, targetPositions] = command;
-    let origin = game.world[originPosition.x][originPosition.y];
 
-    while (targetPositions.length > 0) {
-      let n = Math.floor(origin.units.length / targetPositions.length);
-      let targetP = targetPositions.pop();
-      let target = game.world[targetP.x][targetP.y];
+  // initialise the next game state
+  let allTiles = flatten(game.world);
+  let occupiedTiles = allTiles.filter(t => t.units.length > 0);
+  for (let tile of occupiedTiles)
+    tile.nextUnits = Array.from(tile.units);
+
+  // execute interactions
+  for (let cmd of game.commands)
+    cmd.targets.forEach(t => interact(cmd, t));
+  // change blocked targets to origin
+  for (let cmd of game.commands)
+    cmd.targets = cmd.targets.map(t => blocked(cmd, t) ? cmd.origin : t);
+  // update unit counts
+  for (let tile of occupiedTiles)
+    tile.units = Array.from(tile.nextUnits);
+  
+  // execute movement
+  for (let command of game.commands) {
+    let {origin, targets} = command;
+    while (targets.length > 0) {
+      let n = Math.floor(origin.units.length / targets.length);
+      let target = targets.pop();
       target.units = target.units.concat(origin.units.splice(0, n));
       target.player = origin.player;
     }
-  });
+  }
 
   // reset commands and send the updates to all the players
   game.commands = [];
@@ -193,6 +234,10 @@ function removePlayer(game, player) {
 
 function nCommands(commands) {
   return commands.reduce((acc, val) => acc + val[1].length, 0);
+}
+
+function flatten(array) {
+  return array.reduce((acc, val) => acc.concat(val), []);
 }
 
 // server init

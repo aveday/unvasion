@@ -28,7 +28,7 @@ function drawTile(x, y, world) {
   let X = Math.floor(x*cellSize);
   let Y = Math.floor(y*cellSize);
   let E = Math.ceil(cellSize);
-  if (tile.terrain > 0) {
+  if (tile.terrain >= 0) {
     context.lineWidth = 2;
     context.fillStyle = "#4f9627";
     context.strokeStyle = "#3f751f";
