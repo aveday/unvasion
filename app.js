@@ -138,6 +138,11 @@ function loadCommands(game, player, commands) {
     run(game);
 }
 
+function setDefaultTarget(tile) {
+  if (tile.targets.length === 0)
+    tile.targets = [tile];
+}
+
 function runInteractions(tile) {
   let p = Math.ceil(tile.units.length / tile.targets.length / 2);
   tile.targets.forEach(target => {
@@ -184,6 +189,7 @@ function run(game) {
   allTiles.forEach(tile => tile.nextPlayer = tile.player);
 
   // execute interactions
+  occupied.forEach(setDefaultTarget);
   occupied.forEach(runInteractions);
   occupied.forEach(updateTargets);
   occupied.forEach(updateTile);
