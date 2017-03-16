@@ -15,6 +15,7 @@ var unitCap = 25;
 var autoreload = true;
 var port  = 4000;
 var games = [];
+var sockets = [];
 var gameTimeouts = new Map();
 
 var mapDef = {
@@ -82,13 +83,15 @@ function playerSession(socket) {
     io.emit("reload");
     return;
   }
+
+  let player = newPlayer(socket);
   // start a new game session if there aren't any
   if (games.length === 0)
     games.push(Game(mapDef, 4000));
   let game = games[0];
 
   // add the player
-  let player = addPlayer(game, socket);
+  addPlayer(game, player);
   io.emit("msg", "Connected to server");
 
   socket.emit("sendPlayerId", player);
@@ -102,30 +105,29 @@ function playerSession(socket) {
 }
 
 function startGame(game, player) {
-  console.log(player, chalk.grey("ready to start"));
+  console.log(chalk.grey("Player %s ready"), player);
   game.waitingOn.delete(player);
   if (game.waitingOn.size === 0)
     startTurn(game);
 }
 
 function startTurn(game) {
-  console.log(chalk.blue("\nstarting turn", game.turnCount));
+  console.log(chalk.green("\nStarting turn", game.turnCount));
   io.emit("startTurn", game.turnTime);
   game.waitingOn = new Set(game.players);
   gameTimeouts.set(game, setTimeout(endTurn, game.turnTime, game));
 }
 
 function endTurn(game) {
-  console.log(chalk.yellow("ending turn", game.turnCount));
-  game.waitingOn.forEach(player => {
-    io.sockets.connected[player].emit("requestCommands");
-  });
+  console.log(chalk.yellow("Ending turn", game.turnCount));
+  game.waitingOn.forEach(player => sockets[player].emit("requestCommands"));
 }
 
 function loadCommands(game, player, commands) {
   // TODO properly validate commadns (eg: targets <= units.length)
   // load the commands from the player messages
-  console.log(player, chalk.magenta(nCommands(commands), "commands"));
+  console.log(chalk.magenta("Player %s sent %s commands"),
+    player, nCommands(commands));
   if (game.waitingOn.has(player))
     for (let [tilePos, targetsPos] of commands)
       game.world[tilePos.x][tilePos.y]
@@ -223,11 +225,10 @@ function findEmptyTiles(world) {
   return emptyTiles;
 }
 
-function addPlayer(game, socket) {
-  let player = socket.id;
-  console.log(player, chalk.blue("player connected"));
+function addPlayer(game, player) {
   game.players.push(player);
   game.waitingOn.add(player);
+  console.log(chalk.yellow("Player %s joined game"), player);
 
   // start on random empty tile with 12 units (dev)
   let empty = findEmptyTiles(game.world);
@@ -236,8 +237,14 @@ function addPlayer(game, socket) {
   return player;
 }
 
+function newPlayer(socket) {
+  let player = sockets.push(socket) - 1;
+  console.log(chalk.blue("Player %s connected"), player);
+  return player;
+}
+
 function removePlayer(game, player) {
-  console.log(player, chalk.red("player disconnected -"));
+  console.log(chalk.red("Player %s disconnected"), player);
   game.players = game.players.filter(p => p !== player);
   game.waitingOn.delete(player);
   deletePlayerUnits(game.world, player);
