@@ -136,22 +136,21 @@ function loadCommands(game, player, commands) {
   }
 }
 
-function blocked(command, target) {
-  return target.terrain < 0
-      || target.units.length > 0 && target.player !== command.origin.player;
+function runInteractions(command) {
+  let p = Math.ceil(command.origin.units.length / command.targets.length / 2);
+  command.targets.forEach(target => {
+    if (target.units.length > 0 && target.player !== command.origin.player)
+      target.nextUnits.splice(0, p);
+  });
 }
 
-function interact(command, target) {
-  if (target.units.length == 0)
-    return;
-  // attack
-  if (target.player !== command.origin.player)
-    target.nextUnits.splice(0, damage(command));
-}
-
-function damage(command) {
-  let damage = command.origin.units.length / 2 / command.targets.length;
-  return Math.ceil(damage);
+function updateTargets(command) {
+  command.targets = command.targets.map(target => {
+    let targetInvalid =
+        target.terrain < 0
+     || target.units.length > 0 && target.player !== command.origin.player;
+    return targetInvalid ? command.origin : target;
+  });
 }
 
 function run(game) {
@@ -162,19 +161,15 @@ function run(game) {
 
   // initialise the next game state
   let allTiles = flatten(game.world);
-  let occupiedTiles = allTiles.filter(t => t.units.length > 0);
-  for (let tile of occupiedTiles)
-    tile.nextUnits = Array.from(tile.units);
+  let occupied = allTiles.filter(tile => tile.units.length > 0);
+  occupied.forEach(tile => tile.nextUnits = Array.from(tile.units));
 
   // execute interactions
-  for (let cmd of game.commands)
-    cmd.targets.forEach(t => interact(cmd, t));
-  // change blocked targets to origin
-  for (let cmd of game.commands)
-    cmd.targets = cmd.targets.map(t => blocked(cmd, t) ? cmd.origin : t);
-  // update unit counts
-  for (let tile of occupiedTiles)
-    tile.units = Array.from(tile.nextUnits);
+  game.commands.forEach(runInteractions);
+  game.commands.forEach(updateTargets);
+
+  // update units
+  occupied.forEach(tile => tile.units = Array.from(tile.nextUnits));
   
   // execute movement
   for (let command of game.commands) {
