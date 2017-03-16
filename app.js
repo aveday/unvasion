@@ -26,17 +26,16 @@ function Game(w, h, turnTime) {
   };
 }
 
+function setUnits(world, tile, player, n) {
+  tile.player = player;
+  tile.units = Array.from({length: n}, () => world.nextId++);
+  console.log(tile.units);
+}
+
 function World(width, height) {
   console.log("Creating world...");
   let world = [];
   world.nextId = 0;
-
-  world.addUnits = function(tile, player, n) {
-    tile.player = player;
-    for (let i = 0; i < n; i++)
-      tile.units.push(world.nextId++);
-    return tile.units;
-  };
 
   let noise = new simplex(Math.random);
   let offset = 0.3;
@@ -154,7 +153,7 @@ function updateTargets(command) {
 }
 
 function updateTile(tile) {
-  tile.units = Array.from(tile.nextUnits));
+  tile.units = Array.from(tile.nextUnits);
   if (tile.units.length === 0)
     tile.player = undefined;
 }
@@ -216,10 +215,11 @@ function addPlayer(game, socket) {
   console.log(player, chalk.blue("player connected"));
   game.players.push(player);
   game.waitingOn.add(player);
+
   // start on random empty tile with 12 units (dev)
   let empty = findEmptyTiles(game.world);
   let emptyTile = empty[Math.floor(Math.random() * empty.length)];
-  game.world.addUnits(emptyTile, player, 12);
+  setUnits(game.world, emptyTile, player, 12);
   return player;
 }
 
