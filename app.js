@@ -153,6 +153,12 @@ function updateTargets(command) {
   });
 }
 
+function updateTile(tile) {
+  tile.units = Array.from(tile.nextUnits));
+  if (tile.units.length === 0)
+    tile.player = undefined;
+}
+
 function run(game) {
   clearTimeout(gameTimeouts.get(game));
   console.log(chalk.cyan(
@@ -167,9 +173,7 @@ function run(game) {
   // execute interactions
   game.commands.forEach(runInteractions);
   game.commands.forEach(updateTargets);
-
-  // update units
-  occupied.forEach(tile => tile.units = Array.from(tile.nextUnits));
+  occupied.forEach(updateTile);
   
   // execute movement
   for (let command of game.commands) {
