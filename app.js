@@ -55,7 +55,8 @@ function Tile(id, x, y) {
     position: {x, y},
     units: [],
     connected: [],
-    targets: [] //FIXME
+    attackedBy: [], //TODO consolidate attackedBy and inbound?
+    inbound: [],
   };
 }
 
@@ -159,43 +160,62 @@ function loadCommands(game, player, commandIds) {
   if (!game.waitingOn.size) run(game);
 }
 
-function setDefaultTarget(tile) {
-  if (tile.targets.length === 0)
-    tile.targets = [tile];
+function setGroups(tile, targets) {
+  targets = targets || [tile];
+  tile.groups = evenChunks(tile.units, targets.length);
+  tile.groups.forEach((group, i) => {
+    group.player = tile.player;
+    group.target = targets[i]
+  });
+}
+
+function areEnemies(tile1, tile2) {
+  return tile1.player !== tile2.player
+      && tile1.units.length
+      && tile2.units.length;
 }
 
 function runInteractions(tile) {
-  // TODO redo power to use evenChunk groups
-  let power = Math.ceil(tile.units.length / tile.targets.length / 2);
-  tile.targets.forEach(target => {
-    if (target.units.length && target.player !== tile.player)
-      target.next.units.splice(0, power);
+  tile.groups.forEach(group => {
+    //attack enemy tiles
+    if (areEnemies(tile, group.target))
+      group.target.attackedBy = group.target.attackedBy.concat(group);
+    //TODO buildings and building interactions
+  });
+  // update targets to prevent interaction and movement on same turn
+  tile.groups.forEach(group => {
+    if (areEnemies(tile, group.target)) //TODO other inaccessibility criteria
+      group.target = tile;
   });
 }
 
-function updateTargets(tile) {
-  tile.targets = tile.targets.map(target => {
-    let targetInvalid =
-        target.terrain < 0
-     || target.units.length > 0 && target.player !== tile.player;
-    return targetInvalid ? tile : target;
-  });
+function calculateFatalities(tile) {
+  let damageTaken = Math.ceil(tile.attackedBy.length / 2);
+  let deaths = evenChunks(Array(damageTaken), tile.groups.length);
+  tile.groups.forEach((group, i) => group.splice(0, deaths[i].length));
+  if (tile.groups.every(group => group.length === 0))
+    tile.player = undefined;
+  tile.attackedBy = [];
 }
 
-function updateTile(tile) {
-  tile.units = Array.from(tile.next.units);
-  tile.player = tile.units.length > 0 ? tile.next.player : undefined;
+function sendUnits(tile) {
+  tile.groups.forEach(group => group.target.inbound.push(group));
+  tile.groups = [];
 }
 
-function runMovements(tile) {
-  if (tile.targets.length === 0) tile.targets = [tile];
-  let groups = evenChunks(tile.units, tile.targets.length);
-
-  tile.next.units = tile.next.units.filter(u => !tile.units.includes(u));
-  tile.targets.forEach((target, i) => {
-    target.next.units = target.next.units.concat(groups[i]);
-    target.next.player = tile.player;
+function receiveUnits(tile) {
+  // join inbound groups of the same player
+  let groups = [];
+  tile.inbound.forEach(group => {
+    let allies = groups.find(g => g.player === group.player);
+    allies && allies.push(...group) || groups.push(group);
   });
+  tile.inbound = [];
+  // largest group wins, with losses equal to the size of second largest
+  let victor = groups.reduce((v, g) => g.length > v.length ? g : v, []);
+  let deaths = groups.map(g => g.length).sort((a, b) => b - a)[1] || 0;
+  tile.units = Array.from(victor.slice(deaths));
+  tile.player = tile.units.length ? victor.player : undefined;
 }
 
 function run(game) {
@@ -203,29 +223,21 @@ function run(game) {
   console.log(chalk.cyan("Turn %s, running % commands",
     game.turnCount++, nCommands(game.commands)));
 
-  // initialise the tiles for simulation
-  game.commands.forEach((targets, origin) => origin.targets = targets);
-  game.tiles.forEach(tile => {
-    tile.next = {units: Array.from(tile.units), player: tile.player};
-  });
-
+  // set the groups and group.targets based on tile commands
   let occupied = game.tiles.filter(tile => tile.units.length > 0);
+  occupied.forEach(tile => setGroups(tile, game.commands.get(tile)));
+  game.commands.clear();
 
   // execute interactions
-  occupied.forEach(setDefaultTarget);
   occupied.forEach(runInteractions);
-  occupied.forEach(updateTargets);
-  occupied.forEach(updateTile);
+  occupied.forEach(calculateFatalities);
 
   // execute movement
-  occupied.forEach(runMovements);
-  game.tiles.forEach(updateTile);
+  occupied.forEach(sendUnits);
+  game.tiles.forEach(receiveUnits);
 
-  // reset commands and send the updates to all the players
-  game.tiles.forEach(tile => tile.targets = []);
-  game.commands.clear();
+  // send the updates to the players and start a new turn
   io.emit("sendState", game); // FIXME to just send update
-
   startTurn(game);
 }
 
