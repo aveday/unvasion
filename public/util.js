@@ -15,14 +15,9 @@ function elementCoords(baseElement, pageX, pageY) {
   return new Point(pageX - offsetX, pageY - offsetY);
 }
 
-function iterate2D(w, h, f) {
-  for (var x = 0; x < w; ++x)
-    for (var y = 0; y < h; ++y)
-      f(x, y);
-}
-
 function fillCanvas(canvas, color) {
   var context = canvas.getContext("2d");
+  context.globalAlpha = 1;
   context.fillStyle = color;
   context.fillRect(0, 0, canvas.width, canvas.height);
 }
@@ -54,21 +49,22 @@ function eq(a, b) {
 }
 
 // from http://xqt2.com/p/MoreCanvasContext.html
-CanvasRenderingContext2D.prototype.shape = function (p,points,s,t){
-  var px = p.x + s*(Math.cos(t)*points[0][0] - Math.sin(t)*points[0][1]);
-  var py = p.y + s*(Math.sin(t)*points[0][0] + Math.cos(t)*points[0][1]);
+CanvasRenderingContext2D.prototype.shape = function (x,y,points,s,t){
+  var px = x + s*(Math.cos(t)*points[0][0] - Math.sin(t)*points[0][1]);
+  var py = y + s*(Math.sin(t)*points[0][0] + Math.cos(t)*points[0][1]);
   this.beginPath();
   this.moveTo(px, py);
   for (var i = 1; i < points.length; ++i){
-    px = p.x + s*(Math.cos(t)*points[i][0] - Math.sin(t)*points[i][1]);
-    py = p.y + s*(Math.sin(t)*points[i][0] + Math.cos(t)*points[i][1]);
+    px = x + s*(Math.cos(t)*points[i][0] - Math.sin(t)*points[i][1]);
+    py = y + s*(Math.sin(t)*points[i][0] + Math.cos(t)*points[i][1]);
     this.lineTo(px, py);
   }
   this.closePath();
 };
 
-var arrow = [[-2,1], [1,1], [1,2], [3,0], [1,-2], [1,-1], [-2,-1]];
-
+var shapes = {
+  arrow: [[-2,1], [1,1], [1,2], [3,0], [1,-2], [1,-1], [-2,-1]],
+};
 
 // https://github.com/micro-js/hsv-to-rgb/blob/master/lib/index.js
 function hsvToRgb (h, s, v) {

@@ -11,7 +11,6 @@ var SimplexNoise = require("simplex-noise");
 
 var noise = new SimplexNoise(new Alea(0));
 
-var unitCap = 25;
 var autoreload = true;
 var port  = 4000;
 var games = [];
@@ -39,20 +38,23 @@ function simplexGen(x, y, seed) {
 function Game(mapDef, turnTime) {
   console.log("Starting new game...");
   return {
-    world: World(mapDef),
+    tiles: Tiles(mapDef),
     turnTime,
     players: [],
     waitingOn: new Set(),
-    commands: [],
+    commands: new Map(),
     nextId: 0,
     turnCount: 0,
   };
 }
 
-function Tile(terrain) {
+function Tile(id, x, y) {
   return {
-    terrain, player: undefined,
-    units: [], targets: [],
+    id,
+    position: {x, y},
+    units: [],
+    connected: [],
+    targets: [] //FIXME
   };
 }
 
@@ -61,11 +63,24 @@ function setUnits(game, tile, player, n) {
   tile.units = Array.from({length: n}, () => game.nextId++);
 }
 
-function World(mapDef) {
-  console.log("Creating world...");
-  return Array.from(new Array(mapDef.width),
-    (v, x) => Array.from(new Array(mapDef.height),
-    (v, y) => Tile(mapDef.zGen(x, y, mapDef.seed))));
+function Tiles(mapDef) {
+  console.log("Creating tiles...");
+  let tiles = [];
+
+  for (let x = (mapDef.width % 1 + 1) / 2; x < mapDef.width; ++x)
+    for (let y = (mapDef.height % 1 + 1) / 2; y < mapDef.height; ++y)
+      if (mapDef.zGen(x, y, mapDef.seed) >= 0)
+        tiles.push(Tile(tiles.length, x, y));
+
+  tiles.forEach((tile, i) => {
+    tiles.slice(i + 1).forEach(other => {
+      if (distSq(tile.position, other.position) <= 1) {
+        tile.connected.push(other.id);
+        other.connected.push(tile.id);
+      }
+    });
+  });
+  return tiles;
 }
 
 function handleError(err, html) {
@@ -98,7 +113,7 @@ function playerSession(socket) {
   io.emit("sendState", game);
 
   socket.on("ready", () => startGame(game, player));
-  socket.on("sendCommands", commands => loadCommands(game, player, commands));
+  socket.on("sendCommands", cmdIds => loadCommands(game, player, cmdIds));
 
   socket.on("msg", msg => console.log(msg));
   socket.on("disconnect", () => removePlayer(game, player));
@@ -123,21 +138,24 @@ function endTurn(game) {
   game.waitingOn.forEach(player => sockets[player].emit("requestCommands"));
 }
 
-function loadCommands(game, player, commands) {
-  // TODO properly validate commadns (eg: targets <= units.length)
+function loadCommands(game, player, commandIds) {
   // load the commands from the player messages
-  console.log(chalk.magenta("Player %s sent %s commands"),
-    player, nCommands(commands));
-  if (game.waitingOn.has(player))
-    for (let [tilePos, targetsPos] of commands)
-      game.world[tilePos.x][tilePos.y]
-          .targets = targetsPos.map(t => game.world[t.x][t.y]);
-  else
+  console.log("Player %s sent %s commands", player, nCommands(commandIds));
+  // TODO properly validate commands (eg: targets <= units.length)
+
+  // ignore dupes //TODO safely allow updated commands
+  if (!game.waitingOn.has(player))
     console.warn(player, chalk.bold.red("duplicate commands ignored"));
+  else
+    commandIds.forEach(command => {
+      let [originId, targetIds] = command;
+      let origin = game.tiles[originId];
+      let targets = targetIds.map(id => game.tiles[id]);
+      game.commands.set(origin, targets);
+    });
 
   game.waitingOn.delete(player);
-  if (game.waitingOn.size === 0)
-    run(game);
+  if (!game.waitingOn.size) run(game);
 }
 
 function setDefaultTarget(tile) {
@@ -146,10 +164,11 @@ function setDefaultTarget(tile) {
 }
 
 function runInteractions(tile) {
-  let p = Math.ceil(tile.units.length / tile.targets.length / 2);
+  // TODO redo power to use evenChunk groups
+  let power = Math.ceil(tile.units.length / tile.targets.length / 2);
   tile.targets.forEach(target => {
-    if (target.units.length > 0 && target.player !== tile.player)
-      target.nextUnits.splice(0, p);
+    if (target.units.length && target.player !== tile.player)
+      target.next.units.splice(0, power);
   });
 }
 
@@ -163,32 +182,33 @@ function updateTargets(tile) {
 }
 
 function updateTile(tile) {
-  tile.units = Array.from(tile.nextUnits);
-  tile.player = tile.units.length > 0 ? tile.nextPlayer : undefined;
+  tile.units = Array.from(tile.next.units);
+  tile.player = tile.units.length > 0 ? tile.next.player : undefined;
 }
 
 function runMovements(tile) {
   if (tile.targets.length === 0) tile.targets = [tile];
   let groups = evenChunks(tile.units, tile.targets.length);
 
-  tile.nextUnits = tile.nextUnits.filter(u => !tile.units.includes(u));
+  tile.next.units = tile.next.units.filter(u => !tile.units.includes(u));
   tile.targets.forEach((target, i) => {
-    target.nextUnits = target.nextUnits.concat(groups[i]);
-    target.nextPlayer = tile.player;
+    target.next.units = target.next.units.concat(groups[i]);
+    target.next.player = tile.player;
   });
 }
 
 function run(game) {
   clearTimeout(gameTimeouts.get(game));
-  console.log(chalk.cyan( //FIXME differring command format (add tileIds)
-    "running", //nCommands(game.commands),
-    "commands for turn", game.turnCount++));
+  console.log(chalk.cyan("Turn %s, running % commands",
+    game.turnCount++, nCommands(game.commands)));
 
-  // initialise the next game state
-  let allTiles = flatten(game.world);
-  let occupied = allTiles.filter(tile => tile.units.length > 0);
-  allTiles.forEach(tile => tile.nextUnits = Array.from(tile.units));
-  allTiles.forEach(tile => tile.nextPlayer = tile.player);
+  // initialise the tiles for simulation
+  game.commands.forEach((targets, origin) => origin.targets = targets);
+  game.tiles.forEach(tile => {
+    tile.next = {units: Array.from(tile.units), player: tile.player};
+  });
+
+  let occupied = game.tiles.filter(tile => tile.units.length > 0);
 
   // execute interactions
   occupied.forEach(setDefaultTarget);
@@ -198,10 +218,11 @@ function run(game) {
 
   // execute movement
   occupied.forEach(runMovements);
-  allTiles.forEach(updateTile);
+  game.tiles.forEach(updateTile);
 
   // reset commands and send the updates to all the players
-  allTiles.forEach(tile => tile.targets = []);
+  game.tiles.forEach(tile => tile.targets = []);
+  game.commands.clear();
   io.emit("sendState", game); // FIXME to just send update
 
   startTurn(game);
@@ -216,13 +237,8 @@ function deletePlayerUnits(region, player) {
   }
 }
 
-function findEmptyTiles(world) {
-  let emptyTiles = [];
-  world.forEach(row => {
-    let empty = row.filter(tile => tile.units.length === 0);
-    emptyTiles = emptyTiles.concat(empty);
-  });
-  return emptyTiles;
+function findEmptyTiles(tiles) {
+  return tiles.filter(tile => tile.units.length === 0);
 }
 
 function addPlayer(game, player) {
@@ -231,7 +247,7 @@ function addPlayer(game, player) {
   console.log(chalk.yellow("Player %s joined game"), player);
 
   // start on random empty tile with 12 units (dev)
-  let empty = findEmptyTiles(game.world);
+  let empty = findEmptyTiles(game.tiles);
   let emptyTile = empty[Math.floor(Math.random() * empty.length)];
   setUnits(game, emptyTile, player, 12);
   return player;
@@ -247,16 +263,20 @@ function removePlayer(game, player) {
   console.log(chalk.red("Player %s disconnected"), player);
   game.players = game.players.filter(p => p !== player);
   game.waitingOn.delete(player);
-  deletePlayerUnits(game.world, player);
+  deletePlayerUnits(game.tiles, player);
   io.emit("sendState", game);
 }
 
 function nCommands(commands) {
-  return commands.reduce((acc, val) => acc + val[1].length, 0);
+  let n = 0;
+  commands.forEach(targets => n += targets.length);
+  return n;
 }
 
-function flatten(array) {
-  return array.reduce((acc, val) => acc.concat(val), []);
+function distSq(p1, p2) {
+  let dx = p1.x - p2.x;
+  let dy = p1.y - p2.y;
+  return dx*dx + dy*dy;
 }
 
 // server init

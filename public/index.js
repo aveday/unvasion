@@ -9,81 +9,85 @@ let panel = {
   playerCount: document.getElementById("playerCount"),
 };
 
-//let playerColors = ["#3A3232", "#D83018", "#F07848", "#FDFCCE", "#C0D8D8"];
 let playerColors = ["blue", "red"];
 
 let context = canvas.getContext("2d");
 let socket = io();
+let zoom = 4;
+let unitSize = 0.08;
 
 let player = 0;
-let cellSize;
-let world = {};
+let tileSize;
+let tiles = {};
 let players = [];
-let commands = [];
+let commands = new Map();
 let mouse = {};
 
-function drawTile(x, y, world) {
-  context.globalAlpha = 1;
-  let tile = world[x][y];
-  let X = Math.floor(x*cellSize);
-  let Y = Math.floor(y*cellSize);
-  let E = Math.ceil(cellSize);
-  if (tile.terrain >= 0) {
-    context.lineWidth = 2;
-    context.fillStyle = "#4f9627";
-    context.strokeStyle = "#3f751f";
-    context.fillRect(X, Y, E, E);
-    context.strokeRect(X, Y, E, E);
-  }
+function drawTile(tile) {
+  let x = (tile.position.x - 0.5) * tileSize;
+  let y = (tile.position.y - 0.5) * tileSize;
+  let edge = Math.ceil(tileSize);
 
-  context.lineWidth = 0;
-  if (tile.units.length > 0) {
-    let playerIndex = players.findIndex(p => p === tile.player);
-    let playerColor = playerColors[playerIndex % playerColors.length];
-    context.fillStyle = playerColor;
+  context.fillRect(x, y, edge, edge);
+  context.strokeRect(x, y, edge, edge);
+}
 
-    let e = Math.ceil(Math.sqrt(tile.units.length));
-    let m = Math.floor((e*e - tile.units.length) / 2);
+function drawUnits(tile) {
+  if (tile.units.length === 0) return;
 
-    let unitSize = 0.08;
-    for (let n = m; n < tile.units.length + m; ++n) {
-      let ex = X + (Math.floor(n / e) + 0.5)/e *  cellSize;
-      let ey = Y + (n % e + 0.5)/e *  cellSize;
-      context.beginPath();
-      context.arc(ex, ey, unitSize * cellSize, 0, 2 * Math.PI);
-      context.fill();
-      context.closePath();
-    }
+  let x = (tile.position.x - 0.5) * tileSize;
+  let y = (tile.position.y - 0.5) * tileSize;
+
+  let playerIndex = players.indexOf(tile.player);
+  let playerColor = playerColors[playerIndex % playerColors.length];
+  context.fillStyle = playerColor;
+
+  let e = Math.ceil(Math.sqrt(tile.units.length));
+  let m = Math.floor((e*e - tile.units.length) / 2);
+  for (let n = m; n < tile.units.length + m; ++n) {
+    let ux = x + (Math.floor(n / e) + 0.5)/e *  tileSize;
+    let uy = y + (n % e + 0.5)/e *  tileSize;
+    context.beginPath();
+    context.arc(ux, uy, unitSize * tileSize, 0, 2 * Math.PI);
+    context.fill();
+    context.closePath();
   }
 }
 
-function drawCommands(commands) {
-  context.lineWidth = 0;
-  context.globalAlpha = 0.3;
-  context.fillStyle = "yellow";
-  for (let command of commands) {
-    let [origin, targets] = command;
-    for (const target of targets) {
-      let angle = target.angleTo(origin);
-      let arrowPos = midCell(target.add(origin).div(2));
-      let factor = Math.sqrt(targets.length);
-      context.shape(arrowPos, arrow, cellSize/8/factor, angle);
-      context.fill();
-    }
-  }
-}
-
-function midCell(cell) {
-  return new Point(0.5, 0.5).add(cell).mult(cellSize);
+function drawCommand(targets, origin) {
+  let oPos = origin.position;
+  let arrowSize = tileSize / 8 / Math.sqrt(targets.length);
+  targets.forEach(target => {
+    let tPos = target.position;
+    let arrowX = tileSize * (tPos.x + oPos.x) / 2;
+    let arrowY = tileSize * (tPos.y + oPos.y) / 2;
+    let arrowAngle = Math.atan2(tPos.y-oPos.y, tPos.x-oPos.x);
+    context.shape(arrowX, arrowY, shapes.arrow, arrowSize, arrowAngle);
+    context.fill();
+  });
 }
 
 function draw() {
-  context.globalAlpha = 1;
+  // draw water
   fillCanvas(canvas, "#3557a0");
-  let width = world.length;
-  let height = world[0].length;
-  iterate2D(width, height, (x, y) => drawTile(x, y, world));
-  drawCommands(commands);
+
+  // set style and draw tiles
+  context.globalAlpha = 1;
+  context.lineWidth = 2;
+  context.fillStyle = "#4f9627";
+  context.strokeStyle = "#3f751f";
+  tiles.forEach(drawTile);
+
+  // set style and draw units
+  context.lineWidth = 0;
+  tiles.forEach(drawUnits);
+
+  // set style and draw commands
+  context.globalAlpha = 0.3;
+  context.lineWidth = 0;
+  context.fillStyle = "yellow";
+  commands.forEach(drawCommand);
+
 }
 
 function initCanvas() {
@@ -92,61 +96,56 @@ function initCanvas() {
   canvas.width = canvas.height = Math.min(
     window.innerWidth * (1 - gap * 2),
     window.innerHeight * (1 - gap) - panel.header.offsetHeight);
+  canvas.size = new Point(canvas.width, canvas.height);
 
+  //TODO this automatically by putting both elements in a div
   panel.progressBorder.style.width = canvas.width + "px";
 
-  cellSize = canvas.width / world.length;
-  if (world !== undefined)
+  tileSize = canvas.width / zoom; //(tiles.size.width) FIXME
+  if (tiles !== undefined)
     draw(); 
 }
 
-function addCommand(originPos, targetPos) {
-  let origin = world[originPos.x][originPos.y];
-  let target = world[targetPos.x][targetPos.y];
-
+function addCommand(origin, target) {
   // check the move is valid
   if (origin.units.length == 0 ||
       origin.player != player ||
-      originPos.dist(targetPos) !== 1)
+      !origin.connected.includes(target.id))
     return;
 
-  // give the new commands
-  let commandIndex = commands.findIndex(c => eq(c[0], originPos));
-  if (commandIndex === -1)
-    commandIndex = commands.push([originPos, []]) - 1;
+  if (!commands.has(origin)) commands.set(origin, []);
+  let targets = commands.get(origin); //TODO maybe use defaultmap
 
-  let currentTargets = commands[commandIndex][1];
-  let targetIndex = currentTargets.findIndex(t => eq(t, targetPos));
-
-  if (targetIndex !== -1) {
-    currentTargets.splice(targetIndex, 1);
-  } else {
-    if (currentTargets.length >= origin.units.length)
-      currentTargets.splice(0, 1);
-    currentTargets.push(targetPos);
-  }
+  // check against existing commands
+  if (targets.includes(target))
+    targets.splice(targets.indexOf(target), 1);
+  else if (targets.length >= origin.units.length)
+    targets = targets.splice(0, 1, target);
+  else
+    targets.push(target);
 
   // remove the commands entry if there are no targets left
-  if (!currentTargets.length)
-    commands.splice(commandIndex, 1);
+  if (!targets.length)
+    delete commands.delete(origin);
 
   draw();
 }
 
 function sendCommands() {
-  // send the commands to the server
-  socket.emit("sendCommands", commands);
-  commands = [];
-}
+  // convert commands to tileIds and send to the server
+  // TODO split up and send commands individually
+  let commandIds = Array.from(commands, command => {
+    let [origin, targets] = command;
+    return [origin.id, targets.map(target => target.id)];
+  });
 
-function drag(mouse) {
-  addCommand(mouse.down.floor(), mouse.up.floor());
+  socket.emit("sendCommands", commandIds);
+  commands.clear();
 }
 
 function loadState(game) {
-  commands = [];
   players = game.players;
-  world = game.world;
+  tiles = game.tiles;
   panel.playerCount.innerHTML = players.length;
   initCanvas();
 }
@@ -163,16 +162,25 @@ function startTurn(turnTime) {
   progressBar.start(turnTime);
 }
 
-canvas.addEventListener("mousedown", function mouseDown(e) {
-  mouse.down = elementCoords(canvas, e.pageX, e.pageY).div(cellSize);
-});
+function pointInTile(tile, point) {
+  let diff = point.sub(tile.position);
+  return Math.abs(diff.x) < 0.5 && Math.abs(diff.y) < 0.5;
+}
 
-canvas.addEventListener("mouseup", function mouseUp(e) {
-  mouse.up = elementCoords(canvas, e.pageX, e.pageY).div(cellSize);
-  if (mouse.down !== undefined) {
-    drag(mouse);
-    mouse = {};
-  }
+function getClickedTile(e) {
+  let point = elementCoords(canvas, e.pageX, e.pageY)
+    .mult(zoom)
+    .divByPoint(canvas.size);
+  let tile = tiles.find(tile => pointInTile(tile, point));
+  return tile;
+}
+
+canvas.addEventListener("mousedown", e => mouse.down = getClickedTile(e));
+canvas.addEventListener("mouseup", e => {
+  mouse.up = getClickedTile(e);
+  if (mouse.up && mouse.down)
+    addCommand(mouse.down, mouse.up);
+  mouse = {};
 });
 
 socket.on("reload", () => window.location.reload()); 
@@ -181,3 +189,4 @@ socket.on("sendPlayerId", id => player = id);
 socket.on("sendState", loadState);
 socket.on("startTurn", startTurn);
 socket.on("requestCommands", sendCommands);
+
