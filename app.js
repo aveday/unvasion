@@ -38,6 +38,7 @@ function simplexGen(x, y, seed) {
 function Game(mapDef, turnTime) {
   console.log("Starting new game...");
   return {
+    mapInfo: mapDef,
     tiles: Tiles(mapDef),
     turnTime,
     players: [],

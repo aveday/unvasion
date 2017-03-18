@@ -13,15 +13,14 @@ let playerColors = ["blue", "red"];
 
 let context = canvas.getContext("2d");
 let socket = io();
-let zoom = 4;
 let unitSize = 0.08;
 
 let player = 0;
 let tileSize;
-let tiles = {};
-let players = [];
 let commands = new Map();
 let mouse = {};
+
+let tiles, players, mapInfo;
 
 function drawTile(tile) {
   let x = (tile.position.x - 0.5) * tileSize;
@@ -91,19 +90,20 @@ function draw() {
 }
 
 function initCanvas() {
+  if (!tiles || !mapInfo) return;
+  // find largest possible tilesize while still fitting entire map
+  let maxHeight = window.innerHeight * 0.95 - panel.header.offsetHeight;
+  let maxWidth = window.innerWidth * 0.95;
+  tileSize = Math.min(maxHeight / mapInfo.height, maxWidth / mapInfo.width);
+
   // restrict canvas size
-  let gap = 0.05;
-  canvas.width = canvas.height = Math.min(
-    window.innerWidth * (1 - gap * 2),
-    window.innerHeight * (1 - gap) - panel.header.offsetHeight);
-  canvas.size = new Point(canvas.width, canvas.height);
+  canvas.width = mapInfo.width * tileSize;
+  canvas.height = mapInfo.height * tileSize;
 
   //TODO this automatically by putting both elements in a div
   panel.progressBorder.style.width = canvas.width + "px";
 
-  tileSize = canvas.width / zoom; //(tiles.size.width) FIXME
-  if (tiles !== undefined)
-    draw(); 
+  draw(); 
 }
 
 function addCommand(origin, target) {
@@ -144,6 +144,7 @@ function sendCommands() {
 }
 
 function loadState(game) {
+  mapInfo = game.mapInfo;
   players = game.players;
   tiles = game.tiles;
   panel.playerCount.innerHTML = players.length;
@@ -168,9 +169,7 @@ function pointInTile(tile, point) {
 }
 
 function getClickedTile(e) {
-  let point = elementCoords(canvas, e.pageX, e.pageY)
-    .mult(zoom)
-    .divByPoint(canvas.size);
+  let point = elementCoords(canvas, e.pageX, e.pageY).div(tileSize);
   let tile = tiles.find(tile => pointInTile(tile, point));
   return tile;
 }
