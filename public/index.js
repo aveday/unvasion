@@ -9,37 +9,51 @@ let panel = {
   playerCount: document.getElementById("playerCount"),
 };
 
+const HOUSE = 1, BARRACKS = 2;
 let playerColors = ["blue", "red"];
 
 let context = canvas.getContext("2d");
 let socket = io();
 let unitSize = 0.08;
+let planGap = 0.05;
 
 let player = 0;
 let tileSize;
 let commands = new Map();
+let plans = new Map();
 let mouse = {};
 
 let tiles, players, mapInfo;
 
-function drawTile(tile) {
-  let x = (tile.position.x - 0.5) * tileSize;
-  let y = (tile.position.y - 0.5) * tileSize;
-  let edge = Math.ceil(tileSize);
+function midTile(tile) {
+  return {
+    x: (tile.position.x - 0.5) * tileSize,
+    y: (tile.position.y - 0.5) * tileSize,
+  };
+}
 
-  context.fillRect(x, y, edge, edge);
-  context.strokeRect(x, y, edge, edge);
+function playerColor(player) {
+  let index = players.indexOf(player);
+  return playerColors[index % playerColors.length];
+}
+
+function drawTile(tile) {
+  let {x, y} = midTile(tile);
+  context.fillRect(x, y, tileSize, tileSize);
+  context.strokeRect(x, y, tileSize, tileSize);
+}
+
+function drawPlans(type, tile) {
+  let {x, y} = midTile(tile);
+  let gap = planGap * tileSize;
+  context.strokeRect(x+gap, y+gap, tileSize-gap*2, tileSize-gap*2);
 }
 
 function drawUnits(tile) {
   if (tile.units.length === 0) return;
+  let {x, y} = midTile(tile);
 
-  let x = (tile.position.x - 0.5) * tileSize;
-  let y = (tile.position.y - 0.5) * tileSize;
-
-  let playerIndex = players.indexOf(tile.player);
-  let playerColor = playerColors[playerIndex % playerColors.length];
-  context.fillStyle = playerColor;
+  context.fillStyle = playerColor(tile.player);
 
   let e = Math.ceil(Math.sqrt(tile.units.length));
   let m = Math.floor((e*e - tile.units.length) / 2);
@@ -68,21 +82,25 @@ function drawCommand(targets, origin) {
 }
 
 function draw() {
-  // draw water
+  // water
   fillCanvas(canvas, "#3557a0");
 
-  // set style and draw tiles
+  // tiles
   context.globalAlpha = 1;
   context.lineWidth = 2;
   context.fillStyle = "#4f9627";
   context.strokeStyle = "#3f751f";
   tiles.forEach(drawTile);
 
-  // set style and draw units
+  // building plans
+  context.strokeStyle = playerColor(player);
+  plans.forEach(drawPlans);
+
+  // units
   context.lineWidth = 0;
   tiles.forEach(drawUnits);
 
-  // set style and draw commands
+  // commands
   context.globalAlpha = 0.3;
   context.lineWidth = 0;
   context.fillStyle = "yellow";
@@ -108,8 +126,15 @@ function initCanvas() {
 }
 
 function addCommand(origin, target) {
+  // check if building plan
+  if (!origin.units.length) {
+    plans.has(origin) && plans.delete(origin) || plans.set(origin, HOUSE);
+    draw();
+    return;
+  }
+
   // check the move is valid
-  if (!origin.units.length || origin.player != player ||
+  if (origin.player != player ||
       ![origin.id, ...origin.connected].includes(target.id))
     return;
 
@@ -141,6 +166,7 @@ function sendCommands() {
 
   socket.emit("sendCommands", commandIds);
   commands.clear();
+  plans.clear();
   mouse = {};
 }
 
