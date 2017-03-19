@@ -165,7 +165,7 @@ function setGroups(tile, targets) {
   tile.groups = evenChunks(tile.units, targets.length);
   tile.groups.forEach((group, i) => {
     group.player = tile.player;
-    group.target = targets[i]
+    group.target = targets[i];
   });
 }
 
