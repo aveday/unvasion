@@ -43,27 +43,28 @@ function drawUnits(tile) {
 
   let e = Math.ceil(Math.sqrt(tile.units.length));
   let m = Math.floor((e*e - tile.units.length) / 2);
+
+  context.beginPath();
   for (let n = m; n < tile.units.length + m; ++n) {
     let ux = x + (Math.floor(n / e) + 0.5)/e *  tileSize;
     let uy = y + (n % e + 0.5)/e *  tileSize;
-    context.beginPath();
+    context.moveTo(ux, uy);
     context.arc(ux, uy, unitSize * tileSize, 0, 2 * Math.PI);
-    context.fill();
-    context.closePath();
   }
+  context.closePath();
+  context.fill();
 }
 
 function drawCommand(targets, origin) {
-  let oPos = origin.position;
-  let arrowSize = tileSize / 8 / Math.sqrt(targets.length);
-  targets.forEach(target => {
-    let tPos = target.position;
-    let arrowX = tileSize * (tPos.x + oPos.x) / 2;
-    let arrowY = tileSize * (tPos.y + oPos.y) / 2;
-    let arrowAngle = Math.atan2(tPos.y-oPos.y, tPos.x-oPos.x);
-    context.shape(arrowX, arrowY, shapes.arrow, arrowSize, arrowAngle);
-    context.fill();
-  });
+  //TODO fill red for attacks
+  targets.forEach(target =>
+    context.fillShape(
+      tileSize * (target.position.x + origin.position.x) / 2,
+      tileSize * (target.position.y + origin.position.y) / 2,
+      target === origin ? shapes.square : shapes.arrow,
+      tileSize / 8 / Math.sqrt(targets.length),
+      Math.atan2(target.position.y - origin.position.y,
+                 target.position.x - origin.position.x)));
 }
 
 function draw() {
@@ -108,9 +109,8 @@ function initCanvas() {
 
 function addCommand(origin, target) {
   // check the move is valid
-  if (origin.units.length == 0 ||
-      origin.player != player ||
-      !origin.connected.includes(target.id))
+  if (!origin.units.length || origin.player != player ||
+      ![origin.id, ...origin.connected].includes(target.id))
     return;
 
   if (!commands.has(origin)) commands.set(origin, []);

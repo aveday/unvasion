@@ -49,7 +49,7 @@ function eq(a, b) {
 }
 
 // from http://xqt2.com/p/MoreCanvasContext.html
-CanvasRenderingContext2D.prototype.shape = function (x,y,points,s,t){
+CanvasRenderingContext2D.prototype.fillShape = function (x,y,points,s,t){
   var px = x + s*(Math.cos(t)*points[0][0] - Math.sin(t)*points[0][1]);
   var py = y + s*(Math.sin(t)*points[0][0] + Math.cos(t)*points[0][1]);
   this.beginPath();
@@ -60,10 +60,12 @@ CanvasRenderingContext2D.prototype.shape = function (x,y,points,s,t){
     this.lineTo(px, py);
   }
   this.closePath();
+  this.fill();
 };
 
 var shapes = {
   arrow: [[-2,1], [1,1], [1,2], [3,0], [1,-2], [1,-1], [-2,-1]],
+  square: [[-1,1],  [1,1], [1, -1], [-1,-1]],
 };
 
 // https://github.com/micro-js/hsv-to-rgb/blob/master/lib/index.js
