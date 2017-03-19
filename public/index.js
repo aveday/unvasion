@@ -16,6 +16,7 @@ let context = canvas.getContext("2d");
 let socket = io();
 let unitSize = 0.08;
 let planGap = 0.05;
+let dashSize = 0.1;
 
 let player = 0;
 let tileSize;
@@ -93,8 +94,10 @@ function draw() {
   tiles.forEach(drawTile);
 
   // building plans
-  context.strokeStyle = playerColor(player);
+  context.setLineDash([tileSize*dashSize, tileSize*dashSize]);
+  context.strokeStyle = "brown";
   plans.forEach(drawPlans);
+  context.setLineDash([]);
 
   // units
   context.lineWidth = 0;
