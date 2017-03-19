@@ -141,6 +141,7 @@ function sendCommands() {
 
   socket.emit("sendCommands", commandIds);
   commands.clear();
+  mouse = {};
 }
 
 function loadState(game) {
