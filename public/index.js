@@ -21,7 +21,6 @@ let dashSize = 0.1;
 let player = 0;
 let tileSize;
 let commands = new Map();
-let plans = new Map();
 let mouse = {};
 
 let tiles, players, mapInfo;
@@ -44,10 +43,14 @@ function drawTile(tile) {
   context.strokeRect(x, y, tileSize, tileSize);
 }
 
-function drawPlans(type, tile) {
-  let {x, y} = midTile(tile);
-  let gap = planGap * tileSize;
-  context.strokeRect(x+gap, y+gap, tileSize-gap*2, tileSize-gap*2);
+function drawPlans(targets, origin) {
+  targets.forEach(target => {
+    if (target === origin && origin.player === undefined) {
+      let {x, y} = midTile(origin);
+      let gap = planGap * tileSize;
+      context.strokeRect(x+gap, y+gap, tileSize-gap*2, tileSize-gap*2);
+    }
+  });
 }
 
 function drawUnits(tile) {
@@ -70,7 +73,9 @@ function drawUnits(tile) {
   context.fill();
 }
 
-function drawCommand(targets, origin) {
+function drawMoves(targets, origin) {
+  if (origin.player !== player)
+    return;
   //TODO fill red for attacks
   targets.forEach(target =>
     context.fillShape(
@@ -96,18 +101,18 @@ function draw() {
   // building plans
   context.setLineDash([tileSize*dashSize, tileSize*dashSize]);
   context.strokeStyle = "brown";
-  plans.forEach(drawPlans);
+  commands.forEach(drawPlans);
   context.setLineDash([]);
 
   // units
   context.lineWidth = 0;
   tiles.forEach(drawUnits);
 
-  // commands
+  // movement arrows
   context.globalAlpha = 0.3;
   context.lineWidth = 0;
   context.fillStyle = "yellow";
-  commands.forEach(drawCommand);
+  commands.forEach(drawMoves);
 
 }
 
@@ -129,30 +134,29 @@ function initCanvas() {
 }
 
 function addCommand(origin, target) {
-  // check if building plan
-  if (!origin.units.length) {
-    plans.has(origin) && plans.delete(origin) || plans.set(origin, HOUSE);
-    draw();
+  // check the command is to a connected tile
+  if (![origin.id, ...origin.connected].includes(target.id))
     return;
-  }
-
-  // check the move is valid
-  if (origin.player != player ||
-      ![origin.id, ...origin.connected].includes(target.id))
+  // and that tile doesn't belong to another player
+  if (players.includes(origin.player) && origin.player !== player)
     return;
 
-  if (!commands.has(origin)) commands.set(origin, []);
-  let targets = commands.get(origin); //TODO maybe use defaultmap
+  // find current targets
+  if (!commands.has(origin))
+    commands.set(origin, []);
+  let targets = commands.get(origin);
 
-  // check against existing commands
+  // remove if already targeted
   if (targets.includes(target))
     targets.splice(targets.indexOf(target), 1);
-  else if (targets.length >= origin.units.length)
-    targets = targets.splice(0, 1, target);
   else
     targets.push(target);
 
-  // remove the commands entry if there are no targets left
+  // remove the first target if there's too many
+  if (origin.player !== undefined  && targets.length > origin.units.length)
+    targets.shift();
+  
+  // delete from commands map when no targets left
   if (!targets.length)
     delete commands.delete(origin);
 
@@ -169,7 +173,6 @@ function sendCommands() {
 
   socket.emit("sendCommands", commandIds);
   commands.clear();
-  plans.clear();
   mouse = {};
 }
 
@@ -178,7 +181,7 @@ function loadState(game) {
   players = game.players;
   tiles = game.tiles;
   panel.playerCount.innerHTML = players.length;
-  initCanvas();
+  initCanvas(); //TODO only init only the first load, else draw
 }
 
 progressBar.start = function(turnTime) {
