@@ -134,31 +134,32 @@ function initCanvas() {
 }
 
 function addCommand(origin, target) {
-  // check the command is to a connected tile
-  if (![origin.id, ...origin.connected].includes(target.id))
-    return;
-  // and that tile doesn't belong to another player
-  if (players.includes(origin.player) && origin.player !== player)
+  // check the command is between connected tiles
+  if ( ![origin.id, ...origin.connected].includes(target.id)
+    || ![player, undefined].includes(origin.player) )
     return;
 
-  // find current targets
-  if (!commands.has(origin))
-    commands.set(origin, []);
-  let targets = commands.get(origin);
+  let targets = commands.get(origin) || commands.set(origin, []).get(origin);
 
-  // remove if already targeted
-  if (targets.includes(target))
+  // remove commands
+  if (targets.includes(target)) {
     targets.splice(targets.indexOf(target), 1);
-  else
+    if (!targets.length)
+      delete commands.delete(origin);
+  }
+  // building commands
+  else if (origin.player === undefined) {
+    // only allow plans adjacent to friendly tiles
+    if (origin.connected.some(id => tiles[id].player === player))
+      targets.push(target);
+  }
+  // movement commands
+  else if (origin.player === player) {
     targets.push(target);
-
-  // remove the first target if there's too many
-  if (origin.player !== undefined  && targets.length > origin.units.length)
-    targets.shift();
-  
-  // delete from commands map when no targets left
-  if (!targets.length)
-    delete commands.delete(origin);
+    // remove the first target if there's too many
+    if (targets.length > origin.units.length)
+      targets.shift();
+  }
 
   draw();
 }
@@ -207,11 +208,16 @@ function getClickedTile(e) {
   return tile;
 }
 
-canvas.addEventListener("mousedown", e => mouse.down = getClickedTile(e));
+canvas.addEventListener("mousedown", e => {
+  mouse.down = getClickedTile(e);
+  console.log(mouse);
+});
+
 canvas.addEventListener("mouseup", e => {
   mouse.up = getClickedTile(e);
   if (mouse.up && mouse.down)
     addCommand(mouse.down, mouse.up);
+  console.log(mouse);
   mouse = {};
 });
 
