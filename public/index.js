@@ -169,7 +169,13 @@ function sendCommands() {
   // TODO split up and send commands individually
   let commandIds = Array.from(commands, command => {
     let [origin, targets] = command;
-    return [origin.id, targets.map(target => target.id)];
+
+    let targetIds = targets.map(target => target.id);
+    let actions = targets.map(target => {
+        return commands.has(target) && target.player === undefined ? 1 : 0;
+    });
+
+    return [origin.id, targetIds, actions];
   });
 
   socket.emit("sendCommands", commandIds);

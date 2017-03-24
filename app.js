@@ -56,6 +56,7 @@ function Tile(id, x, y) {
     connected: [],
     attackedBy: [], //TODO consolidate attackedBy and inbound?
     inbound: [],
+    building: 0,
   };
 }
 
@@ -130,7 +131,7 @@ function startGame(game, player) {
 function startTurn(game) {
   console.log(chalk.green("\nStarting turn", game.turnCount));
   io.emit("startTurn", game.turnTime);
-  game.tiles.forEach(tile => setGroups(tile, [tile]));
+  game.tiles.forEach(tile => setGroups(tile, [tile], [0]));
   game.waitingOn = new Set(game.players);
   gameTimeouts.set(game, setTimeout(endTurn, game.turnTime, game));
 }
@@ -152,23 +153,26 @@ function loadCommands(game, player, commandIds) {
   }
 
   commandIds.forEach(command => {
-    let [originId, targetIds] = command;
+    let [originId, targetIds, actions] = command;
     let origin = game.tiles[originId];
     let targets = targetIds.map(id => game.tiles[id]);
 
-    setGroups(origin, targets);
+    setGroups(origin, targets, actions);
   });
 
   game.waitingOn.delete(player);
   if (!game.waitingOn.size) run(game);
 }
 
-function setGroups(tile, targets) {
+function setGroups(tile, targets, actions) {
   targets = targets || [tile];
+  actions = actions || [0];
+
   tile.groups = evenChunks(tile.units, targets.length);
   tile.groups.forEach((group, i) => {
     group.player = tile.player;
     group.target = targets[i];
+    group.action = actions[i];
   });
 }
 
@@ -180,15 +184,21 @@ function areEnemies(tile1, tile2) {
 
 function runInteractions(tile) {
   tile.groups.forEach(group => {
-    //attack enemy tiles
+    let move = false;
+
+    // attack enemy tiles
     if (areEnemies(tile, group.target))
       group.target.attackedBy = group.target.attackedBy.concat(group);
-    //TODO buildings and building interactions
-  });
 
-  // update targets to prevent interaction and movement on same turn
-  tile.groups.forEach(group => {
-    if (areEnemies(tile, group.target)) //TODO other inaccessibility criteria
+    // construct buildings
+    else if (group.action)
+      group.target.building += group.length;
+
+    // allow movement if no interactions
+    else
+      move = true;
+      
+    if (!move)
       group.target = tile;
   });
 }
