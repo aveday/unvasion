@@ -12,7 +12,7 @@ function elementCoords(baseElement, pageX, pageY) {
     } while ((element = element.offsetParent));
   }
 
-  return new Point(pageX - offsetX, pageY - offsetY);
+  return [pageX - offsetX, pageY - offsetY];
 }
 
 function fillCanvas(canvas, color) {

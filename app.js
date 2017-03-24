@@ -50,8 +50,7 @@ function Game(mapDef, turnTime) {
 
 function Tile(id, x, y) {
   return {
-    id,
-    position: {x, y},
+    id, x, y,
     units: [],
     connected: [],
     attackedBy: [], //TODO consolidate attackedBy and inbound?
@@ -75,7 +74,7 @@ function Tiles(mapDef) {
 
   tiles.forEach((tile, i) => {
     tiles.slice(i + 1).forEach(other => {
-      if (distSq(tile.position, other.position) <= 1) {
+      if (distSq(tile.x, tile.y, other.x, other.y) <= 1) {
         tile.connected.push(other.id);
         other.connected.push(tile.id);
       }
@@ -285,9 +284,9 @@ function nCommands(commands) {
   return n;
 }
 
-function distSq(p1, p2) {
-  let dx = p1.x - p2.x;
-  let dy = p1.y - p2.y;
+function distSq(x1, y1, x2, y2) {
+  let dx = x1 - x2;
+  let dy = y1 - y2;
   return dx*dx + dy*dy;
 }
 

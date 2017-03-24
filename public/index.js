@@ -26,10 +26,7 @@ let mouse = {};
 let tiles, players, mapInfo;
 
 function midTile(tile) {
-  return {
-    x: (tile.position.x - 0.5) * tileSize,
-    y: (tile.position.y - 0.5) * tileSize,
-  };
+  return [(tile.x - 0.5) * tileSize, (tile.y - 0.5) * tileSize];
 }
 
 function playerColor(player) {
@@ -38,7 +35,7 @@ function playerColor(player) {
 }
 
 function drawTile(tile) {
-  let {x, y} = midTile(tile);
+  let [x, y] = midTile(tile);
   context.fillRect(x, y, tileSize, tileSize);
   context.strokeRect(x, y, tileSize, tileSize);
 }
@@ -46,7 +43,7 @@ function drawTile(tile) {
 function drawPlans(targets, origin) {
   targets.forEach(target => {
     if (target === origin && origin.player === undefined) {
-      let {x, y} = midTile(origin);
+      let [x, y] = midTile(origin);
       let gap = planGap * tileSize;
       context.strokeRect(x+gap, y+gap, tileSize-gap*2, tileSize-gap*2);
     }
@@ -55,7 +52,7 @@ function drawPlans(targets, origin) {
 
 function drawUnits(tile) {
   if (tile.units.length === 0) return;
-  let {x, y} = midTile(tile);
+  let [x, y] = midTile(tile);
 
   context.fillStyle = playerColor(tile.player);
 
@@ -79,12 +76,11 @@ function drawMoves(targets, origin) {
   //TODO fill red for attacks
   targets.forEach(target =>
     context.fillShape(
-      tileSize * (target.position.x + origin.position.x) / 2,
-      tileSize * (target.position.y + origin.position.y) / 2,
+      tileSize * (target.x + origin.x) / 2,
+      tileSize * (target.y + origin.y) / 2,
       target === origin ? shapes.square : shapes.arrow,
       tileSize / 8 / Math.sqrt(targets.length),
-      Math.atan2(target.position.y - origin.position.y,
-                 target.position.x - origin.position.x)));
+      Math.atan2(target.y - origin.y, target.x - origin.x)));
 }
 
 function draw() {
@@ -197,14 +193,13 @@ function startTurn(turnTime) {
   progressBar.start(turnTime);
 }
 
-function pointInTile(tile, point) {
-  let diff = point.sub(tile.position);
-  return Math.abs(diff.x) < 0.5 && Math.abs(diff.y) < 0.5;
+function pointInTile(tile, x, y) {
+  return Math.abs(x - tile.x) < 0.5 && Math.abs(y - tile.y) < 0.5;
 }
 
 function getClickedTile(e) {
-  let point = elementCoords(canvas, e.pageX, e.pageY).div(tileSize);
-  let tile = tiles.find(tile => pointInTile(tile, point));
+  let [x, y] = elementCoords(canvas, e.pageX, e.pageY);
+  let tile = tiles.find(tile => pointInTile(tile, x / tileSize, y / tileSize));
   return tile;
 }
 
