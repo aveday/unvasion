@@ -43,7 +43,6 @@ function Game(mapDef, turnTime) {
     turnTime,
     players: [],
     waitingOn: new Set(),
-    commands: new Map(),
     nextId: 0,
     turnCount: 0,
   };
@@ -131,6 +130,7 @@ function startGame(game, player) {
 function startTurn(game) {
   console.log(chalk.green("\nStarting turn", game.turnCount));
   io.emit("startTurn", game.turnTime);
+  game.tiles.forEach(tile => setGroups(tile, [tile]));
   game.waitingOn = new Set(game.players);
   gameTimeouts.set(game, setTimeout(endTurn, game.turnTime, game));
 }
@@ -146,15 +146,18 @@ function loadCommands(game, player, commandIds) {
   // TODO properly validate commands (eg: targets <= units.length)
 
   // ignore dupes //TODO safely allow updated commands
-  if (!game.waitingOn.has(player))
+  if (!game.waitingOn.has(player)) {
     console.warn(player, chalk.bold.red("duplicate commands ignored"));
-  else
-    commandIds.forEach(command => {
-      let [originId, targetIds] = command;
-      let origin = game.tiles[originId];
-      let targets = targetIds.map(id => game.tiles[id]);
-      game.commands.set(origin, targets);
-    });
+    return;
+  }
+
+  commandIds.forEach(command => {
+    let [originId, targetIds] = command;
+    let origin = game.tiles[originId];
+    let targets = targetIds.map(id => game.tiles[id]);
+
+    setGroups(origin, targets);
+  });
 
   game.waitingOn.delete(player);
   if (!game.waitingOn.size) run(game);
@@ -182,6 +185,7 @@ function runInteractions(tile) {
       group.target.attackedBy = group.target.attackedBy.concat(group);
     //TODO buildings and building interactions
   });
+
   // update targets to prevent interaction and movement on same turn
   tile.groups.forEach(group => {
     if (areEnemies(tile, group.target)) //TODO other inaccessibility criteria
@@ -220,13 +224,8 @@ function receiveUnits(tile) {
 
 function run(game) {
   clearTimeout(gameTimeouts.get(game));
-  console.log(chalk.cyan("Turn %s, running % commands",
-    game.turnCount++, nCommands(game.commands)));
-
-  // set the groups and group.targets based on tile commands
+  console.log(chalk.cyan("Running turn %s"), game.turnCount++);
   let occupied = game.tiles.filter(tile => tile.units.length > 0);
-  occupied.forEach(tile => setGroups(tile, game.commands.get(tile)));
-  game.commands.clear();
 
   // execute interactions
   occupied.forEach(runInteractions);
