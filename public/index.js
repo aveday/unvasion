@@ -43,6 +43,14 @@ function drawTile(tile) {
   context.strokeRect(x, y, tileSize, tileSize);
 }
 
+function drawBuilding(tile) {
+  let {x, y} = midTile(tile);
+  if (tile.building) {
+    let gap = planGap * tileSize;
+    context.fillRect(x+gap, y+gap, tileSize-gap*2, tileSize-gap*2);
+  }
+}
+
 function drawPlans(targets, origin) {
   targets.forEach(target => {
     if (target === origin && origin.player === undefined) {
@@ -98,9 +106,13 @@ function draw() {
   context.strokeStyle = "#3f751f";
   tiles.forEach(drawTile);
 
+  // buildings
+  context.fillStyle = "#47331b";
+  tiles.forEach(drawBuilding);
+
   // building plans
   context.setLineDash([tileSize*dashSize, tileSize*dashSize]);
-  context.strokeStyle = "brown";
+  context.strokeStyle = "#47331b";
   commands.forEach(drawPlans);
   context.setLineDash([]);
 
