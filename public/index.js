@@ -210,14 +210,12 @@ function getClickedTile(e) {
 
 canvas.addEventListener("mousedown", e => {
   mouse.down = getClickedTile(e);
-  console.log(mouse);
 });
 
 canvas.addEventListener("mouseup", e => {
   mouse.up = getClickedTile(e);
   if (mouse.up && mouse.down)
     addCommand(mouse.down, mouse.up);
-  console.log(mouse);
   mouse = {};
 });
 
