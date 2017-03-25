@@ -1,5 +1,20 @@
 "use strict";
 
+function distSq(x1, y1, x2, y2) {
+  let dx = x1 - x2;
+  let dy = y1 - y2;
+  return dx*dx + dy*dy;
+}
+
+function closestPoint(x, y, points) {
+  let minDist = Infinity;
+  return points.reduce((a, v) => {
+    let dist = distSq(x, y, v.x, v.y);
+    minDist = Math.min(dist, minDist);
+    return dist === minDist ? v : a;
+  }, points[0]);
+}
+
 function elementCoords(baseElement, pageX, pageY) {
   var element = baseElement;
   var offsetX = 0;
@@ -20,32 +35,6 @@ function fillCanvas(canvas, color) {
   context.globalAlpha = 1;
   context.fillStyle = color;
   context.fillRect(0, 0, canvas.width, canvas.height);
-}
-// from http://adripofjavascript.com/blog/drips/object-equality-in-javascript.html
-function eq(a, b) {
-  // Create arrays of property names
-  var aProps = Object.getOwnPropertyNames(a);
-  var bProps = Object.getOwnPropertyNames(b);
-
-  // If number of properties is different,
-  // objects are not equivalent
-  if (aProps.length != bProps.length) {
-    return false;
-  }
-
-  for (var i = 0; i < aProps.length; i++) {
-    var propName = aProps[i];
-
-    // If values of same property are not equal,
-    // objects are not equivalent
-    if (a[propName] !== b[propName]) {
-      return false;
-    }
-  }
-
-  // If we made it this far, objects
-  // are considered equivalent
-  return true;
 }
 
 // from http://xqt2.com/p/MoreCanvasContext.html

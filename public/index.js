@@ -26,7 +26,7 @@ let mouse = {};
 
 let tiles, players, mapInfo;
 
-function midTile(tile) {
+function corner(tile) {
   return [(tile.x - 0.5) * tileSize, (tile.y - 0.5) * tileSize];
 }
 
@@ -36,16 +36,16 @@ function playerColor(player) {
 }
 
 function drawTile(tile) {
-  let [x, y] = midTile(tile);
-  context.fillRect(x, y, tileSize, tileSize);
-  context.strokeRect(x, y, tileSize, tileSize);
+  let [x, y] = [tile.x * tileSize, tile.y * tileSize];
+  context.fillShape(x, y, tile.points, tileSize, 0);
+  context.stroke();
 }
 
 function drawBuilding(tile) {
   let gap = GAP_SIZE * tileSize;
   let size = tileSize - gap * 2;
   let part = size / BUILDING_PARTS;
-  let [x, y] = midTile(tile).map(c => c + gap);
+  let [x, y] = corner(tile).map(c => c + gap);
 
   if (tile.building === 1) {
     context.fillRect(x, y, size, size);
@@ -60,7 +60,7 @@ function drawPlans(targets, origin) {
     if (target === origin && origin.player === undefined) {
       let gap = GAP_SIZE * tileSize / 2;
       let size = tileSize - gap * 2;
-      let [x, y] = midTile(origin).map(c => c + gap);
+      let [x, y] = corner(origin).map(c => c + gap);
       context.strokeRect(x, y, size, size);
     }
   });
@@ -68,7 +68,7 @@ function drawPlans(targets, origin) {
 
 function drawUnits(tile) {
   if (tile.units.length === 0) return;
-  let [x, y] = midTile(tile);
+  let [x, y] = corner(tile);
 
   context.fillStyle = playerColor(tile.player);
 
@@ -221,12 +221,17 @@ function startTurn(turnTime) {
 
 function pointInTile(tile, x, y) {
   return Math.abs(x - tile.x) < 0.5 && Math.abs(y - tile.y) < 0.5;
+  context.beginPath()
+  tile.points.forEach(point => context.moveTo(point[0], point[1]));
+  context.closePath();
+  return context.isPointInPath(x, y);
 }
 
 function getClickedTile(e) {
-  let [x, y] = elementCoords(canvas, e.pageX, e.pageY);
-  let tile = tiles.find(tile => pointInTile(tile, x / tileSize, y / tileSize));
-  return tile;
+  let [canvasX, canvasY] = elementCoords(canvas, e.pageX, e.pageY);
+  let [x, y] = [canvasX / tileSize, canvasY / tileSize];
+  let closest = closestPoint(x, y, tiles);
+  return pointInTile(closest, x, y) ? closest : undefined;
 }
 
 canvas.addEventListener("mousedown", e => {

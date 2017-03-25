@@ -52,9 +52,12 @@ function Game(mapDef, turnTime) {
   };
 }
 
-function Tile(id, x, y) {
+function Tile(id, points) {
+  let x = points.map(p => p[0]).reduce((a, v) => a + v, 0) / points.length;
+  let y = points.map(p => p[1]).reduce((a, v) => a + v, 0) / points.length;
+  points.forEach(point => { point[0] -= x; point[1] -= y });
   return {
-    id, x, y,
+    id, x, y, points,
     units: [],
     connected: [],
     attackedBy: [], //TODO consolidate attackedBy and inbound?
@@ -72,11 +75,13 @@ function Tiles(mapDef) {
   console.log("Creating tiles...");
   let tiles = [];
 
-  for (let x = (mapDef.width % 1 + 1) / 2; x < mapDef.width; ++x)
-    for (let y = (mapDef.height % 1 + 1) / 2; y < mapDef.height; ++y)
+  // create grid of tiles
+  for (let x = 0; x < mapDef.width; ++x)
+    for (let y = 0; y < mapDef.height; ++y)
       if (mapDef.zGen(x, y, mapDef.seed) >= 0)
-        tiles.push(Tile(tiles.length, x, y));
+        tiles.push(Tile(tiles.length, [[x,y], [x+1,y], [x+1,y+1], [x,y+1]]);
 
+  // find connected tiles
   tiles.forEach((tile, i) => {
     tiles.slice(i + 1).forEach(other => {
       if (distSq(tile.x, tile.y, other.x, other.y) <= 1) {
