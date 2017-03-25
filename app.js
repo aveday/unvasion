@@ -12,6 +12,8 @@ var SimplexNoise = require("simplex-noise");
 var noise = new SimplexNoise(new Alea(0));
 
 const TILE_MAX = 36;
+const UNIT_COEFFICIENT = 2;
+const SPAWN_REQ = TILE_MAX / UNIT_COEFFICIENT;
 
 var autoreload = true;
 var port  = 4000;
@@ -209,8 +211,8 @@ function runInteractions(tile) {
 }
 
 function calculateFatalities(tile) {
-  let damageTaken = Math.ceil(tile.attackedBy.length / 2);
-  let deaths = evenChunks(Array(damageTaken), tile.groups.length);
+  let damage = tile.attackedBy.length / UNIT_COEFFICIENT;
+  let deaths = evenChunks(Array(Math.ceil(damage)), tile.groups.length);
   tile.groups.forEach((group, i) => group.splice(0, deaths[i].length));
   if (tile.groups.every(group => group.length === 0))
     tile.player = undefined;
@@ -251,17 +253,21 @@ function run(game) {
   game.tiles.forEach(receiveUnits);
 
   // create new units in occupied houses
-  game.tiles.filter(isSpawning).map(tile => tile.units.push(game.nextId++));
+  game.tiles.filter(t => t.building === 1 && t.units.length >= SPAWN_REQ)
+    .forEach(tile => {
+      tile.units.push(game.nextId++);
+    });
+
+  // kill units in overpopulated tiles
+  game.tiles.filter(t => t.units.length > TILE_MAX)
+    .forEach(tile => {
+      let damage = (tile.units.length - TILE_MAX) / UNIT_COEFFICIENT;
+      tile.units.splice(0, Math.ceil(damage));
+    });
 
   // send the updates to the players and start a new turn
   io.emit("sendState", game); // FIXME to just send update
   startTurn(game);
-}
-
-function isSpawning(tile) {
-  return tile.building === 1
-    && tile.units.length > TILE_MAX / 2
-    && tile.units.length < TILE_MAX;
 }
 
 function deletePlayerUnits(region, player) {
