@@ -24,7 +24,7 @@ let tileSize;
 let commands = new Map();
 let mouse = {};
 
-let tiles, players, mapInfo;
+let tiles, players, gameWidth, gameHeight;
 
 function corner(tile) {
   return [(tile.x - 0.5) * tileSize, (tile.y - 0.5) * tileSize];
@@ -134,15 +134,15 @@ function draw() {
 }
 
 function initCanvas() {
-  if (!tiles || !mapInfo) return;
+  if (!tiles) return;
   // find largest possible tilesize while still fitting entire map
   let maxHeight = window.innerHeight * 0.95 - panel.header.offsetHeight;
   let maxWidth = window.innerWidth * 0.95;
-  tileSize = Math.min(maxHeight / mapInfo.height, maxWidth / mapInfo.width);
+  tileSize = Math.min(maxHeight / gameHeight, maxWidth / gameWidth);
 
   // restrict canvas size
-  canvas.width = mapInfo.width * tileSize;
-  canvas.height = mapInfo.height * tileSize;
+  canvas.width = gameWidth * tileSize;
+  canvas.height = gameHeight * tileSize;
 
   //TODO this automatically by putting both elements in a div
   panel.progressBorder.style.width = canvas.width + "px";
@@ -195,7 +195,7 @@ function sendCommands() {
 }
 
 function loadState(game) {
-  mapInfo = game.mapInfo;
+  [gameWidth, gameHeight] = [game.width, game.height];
   players = game.players;
   tiles = game.tiles;
   panel.playerCount.innerHTML = players.length;

@@ -21,11 +21,12 @@ var games = [];
 var sockets = [];
 var gameTimeouts = new Map();
 
-var mapDef = {
+var smallSimplexGrid = {
+  tileGen: gridTiles,
   zGen: simplexGen,
   seed: 4,
-  width: 4,
-  height: 4,
+  width: 6,
+  height: 6,
 };
 
 function simplexGen(x, y, seed) {
@@ -41,15 +42,14 @@ function simplexGen(x, y, seed) {
 
 function Game(mapDef, turnTime) {
   console.log("Starting new game...");
-  return {
-    mapInfo: mapDef,
-    tiles: Tiles(mapDef),
+  return Object.assign({
+    tiles: mapDef.tileGen(mapDef),
     turnTime,
     players: [],
     waitingOn: new Set(),
     nextId: 0,
     turnCount: 0,
-  };
+  }, mapDef);
 }
 
 function Tile(id, points) {
@@ -71,7 +71,7 @@ function setUnits(game, tile, player, n) {
   tile.units = Array.from({length: n}, () => game.nextId++);
 }
 
-function Tiles(mapDef) {
+function gridTiles(mapDef) {
   console.log("Creating tiles...");
   let tiles = [];
 
@@ -79,7 +79,7 @@ function Tiles(mapDef) {
   for (let x = 0; x < mapDef.width; ++x)
     for (let y = 0; y < mapDef.height; ++y)
       if (mapDef.zGen(x, y, mapDef.seed) >= 0)
-        tiles.push(Tile(tiles.length, [[x,y], [x+1,y], [x+1,y+1], [x,y+1]]);
+        tiles.push(Tile(tiles.length, [[x,y], [x+1,y], [x+1,y+1], [x,y+1]]));
 
   // find connected tiles
   tiles.forEach((tile, i) => {
@@ -112,7 +112,7 @@ function playerSession(socket) {
   let player = newPlayer(socket);
   // start a new game session if there aren't any
   if (games.length === 0)
-    games.push(Game(mapDef, 4000));
+    games.push(Game(smallSimplexGrid, 4000));
   let game = games[0];
 
   // add the player
