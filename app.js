@@ -250,9 +250,18 @@ function run(game) {
   occupied.forEach(sendUnits);
   game.tiles.forEach(receiveUnits);
 
+  // create new units in occupied houses
+  game.tiles.filter(isSpawning).map(tile => tile.units.push(game.nextId++));
+
   // send the updates to the players and start a new turn
   io.emit("sendState", game); // FIXME to just send update
   startTurn(game);
+}
+
+function isSpawning(tile) {
+  return tile.building === 1
+    && tile.units.length > TILE_MAX / 2
+    && tile.units.length < TILE_MAX;
 }
 
 function deletePlayerUnits(region, player) {
@@ -273,10 +282,10 @@ function addPlayer(game, player) {
   game.waitingOn.add(player);
   console.log(chalk.yellow("Player %s joined game"), player);
 
-  // start on random empty tile with 12 units (dev)
+  // start on random empty tile with 24 units (dev)
   let empty = findEmptyTiles(game.tiles);
   let emptyTile = empty[Math.floor(Math.random() * empty.length)];
-  setUnits(game, emptyTile, player, 12);
+  setUnits(game, emptyTile, player, 24);
   return player;
 }
 
