@@ -55,6 +55,7 @@ function Tile(id, x, y) {
     connected: [],
     attackedBy: [], //TODO consolidate attackedBy and inbound?
     inbound: [],
+    building: 0,
   };
 }
 
@@ -129,7 +130,7 @@ function startGame(game, player) {
 function startTurn(game) {
   console.log(chalk.green("\nStarting turn", game.turnCount));
   io.emit("startTurn", game.turnTime);
-  game.tiles.forEach(tile => setGroups(tile, [tile]));
+  game.tiles.forEach(tile => setGroups(tile, [tile], [false]));
   game.waitingOn = new Set(game.players);
   gameTimeouts.set(game, setTimeout(endTurn, game.turnTime, game));
 }
@@ -150,24 +151,30 @@ function loadCommands(game, player, commandIds) {
     return;
   }
 
+  // determine which commands are for construction
+  let planIds = commandIds
+    .filter(command => game.tiles[command[0]].player === undefined)
+    .map(commandId => commandId[0]);
+
   commandIds.forEach(command => {
     let [originId, targetIds] = command;
     let origin = game.tiles[originId];
     let targets = targetIds.map(id => game.tiles[id]);
-
-    setGroups(origin, targets);
+    let builds = targetIds.map(id => planIds.includes(id));
+    setGroups(origin, targets, builds);
   });
 
   game.waitingOn.delete(player);
   if (!game.waitingOn.size) run(game);
 }
 
-function setGroups(tile, targets) {
+function setGroups(tile, targets, builds) {
   targets = targets || [tile];
   tile.groups = evenChunks(tile.units, targets.length);
   tile.groups.forEach((group, i) => {
     group.player = tile.player;
     group.target = targets[i];
+    group.build = builds[i];
   });
 }
 
@@ -179,15 +186,18 @@ function areEnemies(tile1, tile2) {
 
 function runInteractions(tile) {
   tile.groups.forEach(group => {
+    let move = false;
     //attack enemy tiles
     if (areEnemies(tile, group.target))
       group.target.attackedBy = group.target.attackedBy.concat(group);
-    //TODO buildings and building interactions
-  });
+    // construct buildings
+    else if (group.build)
+      group.target.building += group.length;
 
-  // update targets to prevent interaction and movement on same turn
-  tile.groups.forEach(group => {
-    if (areEnemies(tile, group.target)) //TODO other inaccessibility criteria
+    else
+      move = true;
+
+    if (!move)
       group.target = tile;
   });
 }
