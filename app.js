@@ -11,6 +11,8 @@ var SimplexNoise = require("simplex-noise");
 
 var noise = new SimplexNoise(new Alea(0));
 
+const TILE_MAX = 36;
+
 var autoreload = true;
 var port  = 4000;
 var games = [];
@@ -187,18 +189,22 @@ function areEnemies(tile1, tile2) {
 function runInteractions(tile) {
   tile.groups.forEach(group => {
     let move = false;
-    //attack enemy tiles
-    if (areEnemies(tile, group.target))
-      group.target.attackedBy = group.target.attackedBy.concat(group);
-    // construct buildings
-    else if (group.build)
-      group.target.building += group.length;
 
-    else
+    //attack enemy tiles
+    if (areEnemies(tile, group.target)) {
+      group.target.attackedBy = group.target.attackedBy.concat(group);
+
+    // construct buildings
+    } else if (group.build) {
+      group.target.building += group.length / TILE_MAX;
+      group.target.building = Math.min(group.target.building, 1);
+
+    } else {
       move = true;
 
-    if (!move)
+    } if (!move) {
       group.target = tile;
+    }
   });
 }
 

@@ -9,14 +9,15 @@ let panel = {
   playerCount: document.getElementById("playerCount"),
 };
 
-const HOUSE = 1, BARRACKS = 2;
+const BUILDING_PARTS = 7;
+const UNIT_SIZE = 0.04;
+const GAP_SIZE = 0.05;
+const DASH_SIZE = 0.1;
+
 let playerColors = ["blue", "red"];
 
 let context = canvas.getContext("2d");
 let socket = io();
-let unitSize = 0.08;
-let planGap = 0.05;
-let dashSize = 0.1;
 
 let player = 0;
 let tileSize;
@@ -41,19 +42,26 @@ function drawTile(tile) {
 }
 
 function drawBuilding(tile) {
-  if (tile.building) {
-    let [x, y] = midTile(tile);
-    let gap = planGap * tileSize;
-    context.fillRect(x+gap, y+gap, tileSize-gap*2, tileSize-gap*2);
+  let gap = GAP_SIZE * tileSize;
+  let size = tileSize - gap * 2;
+  let part = size / BUILDING_PARTS;
+  let [x, y] = midTile(tile).map(c => c + gap);
+
+  if (tile.building === 1) {
+    context.fillRect(x, y, size, size);
+    context.strokeRect(x, y, size, size);
+  } else for (let i = 0; i < BUILDING_PARTS; ++i) {
+    context.fillRect(x, y + i * part, size, part * tile.building);
   }
 }
 
 function drawPlans(targets, origin) {
   targets.forEach(target => {
     if (target === origin && origin.player === undefined) {
-      let [x, y] = midTile(origin);
-      let gap = planGap * tileSize;
-      context.strokeRect(x+gap, y+gap, tileSize-gap*2, tileSize-gap*2);
+      let gap = GAP_SIZE * tileSize / 2;
+      let size = tileSize - gap * 2;
+      let [x, y] = midTile(origin).map(c => c + gap);
+      context.strokeRect(x, y, size, size);
     }
   });
 }
@@ -72,7 +80,7 @@ function drawUnits(tile) {
     let ux = x + (Math.floor(n / e) + 0.5)/e *  tileSize;
     let uy = y + (n % e + 0.5)/e *  tileSize;
     context.moveTo(ux, uy);
-    context.arc(ux, uy, unitSize * tileSize, 0, 2 * Math.PI);
+    context.arc(ux, uy, UNIT_SIZE * tileSize, 0, 2 * Math.PI);
   }
   context.closePath();
   context.fill();
@@ -102,21 +110,22 @@ function draw() {
   context.strokeStyle = "#3f751f";
   tiles.forEach(drawTile);
 
-
+  // buildings
+  context.strokeStyle = "#5b2000";
   context.fillStyle = "#9b500d";
-  tiles.forEach(drawBuilding);
+  tiles.filter(tile => tile.building).forEach(drawBuilding);
 
-  // building plans
-  context.setLineDash([tileSize*dashSize, tileSize*dashSize]);
+  // units
+  context.lineWidth = 0;
+  tiles.filter(tile => tile.units.length).forEach(drawUnits);
+
+  // building commands
+  context.setLineDash([tileSize*DASH_SIZE, tileSize*DASH_SIZE]);
   context.strokeStyle = "yellow";
   commands.forEach(drawPlans);
   context.setLineDash([]);
 
-  // units
-  context.lineWidth = 0;
-  tiles.forEach(drawUnits);
-
-  // movement arrows
+  // movement commands
   context.globalAlpha = 0.3;
   context.lineWidth = 0;
   context.fillStyle = "yellow";
