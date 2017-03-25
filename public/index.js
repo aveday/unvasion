@@ -211,6 +211,11 @@ progressBar.start = function(turnTime) {
 };
 
 function startTurn(turnTime) {
+  // place construction commands on adjacent unfinished buildings
+  tiles.filter(t => t.building && t.building < 1 && !t.units.length)
+      .filter(t => t.connected.some(id => tiles[id].player === player))
+      .forEach(t => addCommand(t, t));
+
   progressBar.start(turnTime);
 }
 
