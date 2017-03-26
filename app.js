@@ -8,8 +8,12 @@ var chalk = require("chalk");
 var evenChunks = require("even-chunks");
 var Alea = require("alea");
 var SimplexNoise = require("simplex-noise");
+var Poisson = require("poisson-disk-sampling");
 
-var noise = new SimplexNoise(new Alea(0));
+var d3 = require("d3-voronoi");
+
+var rng = new Alea(0);
+var noise = new SimplexNoise(rng);
 
 const TILE_MAX = 36;
 const UNIT_COEFFICIENT = 2;
@@ -20,6 +24,14 @@ var port  = 4000;
 var games = [];
 var sockets = [];
 var gameTimeouts = new Map();
+
+var poissonVoronoi = {
+  tileGen: poissonTiles,
+  zGen: simplexGen,
+  seed: 9,
+  width: 20,
+  height: 20,
+};
 
 var smallSimplexGrid = {
   tileGen: gridTiles,
@@ -70,6 +82,28 @@ function setUnits(game, tile, player, n) {
   tile.units = Array.from({length: n}, () => game.nextId++);
 }
 
+function poissonTiles(mapDef) {
+  let size = [mapDef.width, mapDef.height];
+  // generate poisson disk distribution
+  let pds = new Poisson(size, 1, 1, 30, rng);
+  let points = pds.fill();
+  points.forEach((point, i) => point.id = i);
+
+  // find voronoi diagram of points
+  let diagram = d3.voronoi().size(size)(points);
+  let tiles = diagram.polygons().map((poly, i) => Tile(i, poly));
+    //.filter(poly => mapDef.zGen(...poly.data, mapDef.seed) >= 0); FIXME
+
+  // find connected cells
+  points.forEach(point => point.connected = []);
+  diagram.links().forEach(link => {
+    tiles[link.source.id].connected.push(link.target.id);
+    tiles[link.target.id].connected.push(link.source.id);
+  });
+
+  return tiles;
+}
+
 function gridTiles(mapDef) {
   console.log("Creating tiles...");
   let tiles = [];
@@ -111,7 +145,7 @@ function playerSession(socket) {
   let player = newPlayer(socket);
   // start a new game session if there aren't any
   if (games.length === 0)
-    games.push(Game(smallSimplexGrid, 4000));
+    games.push(Game(poissonVoronoi, 4000));
   let game = games[0];
 
   // add the player

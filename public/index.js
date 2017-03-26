@@ -36,8 +36,7 @@ function playerColor(player) {
 }
 
 function drawTile(tile) {
-  let [x, y] = [tile.x * tileSize, tile.y * tileSize];
-  context.fillShape(x, y, tile.points, tileSize, 0);
+  context.fillShape(0, 0, tile.points, tileSize, 0);
   context.stroke();
 }
 
@@ -220,18 +219,18 @@ function startTurn(turnTime) {
 }
 
 function pointInTile(tile, x, y) {
-  return Math.abs(x - tile.x) < 0.5 && Math.abs(y - tile.y) < 0.5;
   context.beginPath()
-  tile.points.forEach(point => context.moveTo(point[0], point[1]));
+  tile.points.forEach(point => context.lineTo(...point));
   context.closePath();
-  return context.isPointInPath(x, y);
+  return context.isPointInPath(x / tileSize, y / tileSize);
 }
 
 function getClickedTile(e) {
   let [canvasX, canvasY] = elementCoords(canvas, e.pageX, e.pageY);
   let [x, y] = [canvasX / tileSize, canvasY / tileSize];
   let closest = closestPoint(x, y, tiles);
-  return pointInTile(closest, x, y) ? closest : undefined;
+  //let tile = pointInTile(closest, x, y) ? closest : undefined; FIXME
+  return closest;
 }
 
 canvas.addEventListener("mousedown", e => {
