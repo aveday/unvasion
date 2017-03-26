@@ -64,7 +64,7 @@ function Game(mapDef, turnTime) {
   }, mapDef);
 }
 
-function Tile(id, points) {
+function Tile(points, id) {
   let x = average(...points.map(p => p[0]));
   let y = average(...points.map(p => p[1]));
   return {
@@ -91,7 +91,7 @@ function poissonTiles(mapDef) {
 
   // find voronoi diagram of points
   let diagram = d3.voronoi().size(size)(points);
-  let tiles = diagram.polygons().map((poly, i) => Tile(i, poly));
+  let tiles = diagram.polygons().map(Tile);
 
   // define terrain height
   tiles.forEach(t => t.terrain = mapDef.zGen(t.x, t.y, mapDef.seed));
@@ -112,7 +112,7 @@ function gridTiles(mapDef) {
   // create grid of tiles
   for (let x = 0; x < mapDef.width; ++x)
     for (let y = 0; y < mapDef.height; ++y)
-      tiles.push(Tile(tiles.length, [[x,y], [x+1,y], [x+1,y+1], [x,y+1]]));
+      tiles.push(Tile([[x,y], [x+1,y], [x+1,y+1], [x,y+1]], tiles.length));
 
   // define terrain height
   tiles.forEach(t => t.terrain = mapDef.zGen(t.x, t.y, mapDef.seed));
