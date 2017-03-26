@@ -15,9 +15,6 @@ const TILE_MAX = 36;
 const UNIT_COEFFICIENT = 2;
 const SPAWN_REQ = TILE_MAX / UNIT_COEFFICIENT;
 
-var rng = new Alea(0);
-var noise = new SimplexNoise(rng);
-
 var autoreload = true;
 var port  = 4000;
 var games = [];
@@ -39,18 +36,18 @@ http.listen(port, () => console.log("Server started on port", port));
 
 var poissonVoronoi = {
   tileGen: poissonTiles,
-  zGen: simplexGen,
-  seed: 9,
+  terrainGen: simplexTerrain,
   width: 20,
   height: 20,
+  seed: 1121,
 };
 
 var smallSimplexGrid = {
   tileGen: gridTiles,
-  zGen: simplexGen,
-  seed: 4,
+  terrainGen: simplexTerrain,
   width: 6,
   height: 6,
+  seed: 212,
 };
 
 /**************
@@ -70,19 +67,23 @@ function Tile(points, id) {
   };
 }
 
-function simplexGen(x, y, seed) {
-  let z = 0.3;
+function simplexTerrain(tiles, rng) {
+  let offset = 0.3;
   let octaves = [
-    {scale: 0.20, amplitude: 0.8},
-    {scale: 0.03, amplitude: 1.0},
+    {scale: 0.20, amp: 0.8},
+    {scale: 0.03, amp: 1.0},
   ];
-  for (let n of octaves)
-    z += n.amplitude * noise.noise3D(x * n.scale, y * n.scale, seed);
-  return z;
+
+  let simplex = new SimplexNoise(rng);
+  tiles.forEach(t => {
+    t.terrain = offset;
+    for (let n of octaves)
+      t.terrain += n.amp * simplex.noise2D(t.x * n.scale, t.y * n.scale);
+  });
 }
 
-function poissonTiles(mapDef) {
-  let size = [mapDef.width, mapDef.height];
+function poissonTiles(width, height, rng) {
+  let size = [width, height];
   // generate poisson disk distribution
   let pds = new Poisson(size, 1, 1, 30, rng);
   let points = pds.fill();
@@ -91,9 +92,6 @@ function poissonTiles(mapDef) {
   // find voronoi diagram of points
   let diagram = voronoi().size(size)(points);
   let tiles = diagram.polygons().map(Tile);
-
-  // define terrain height
-  tiles.forEach(t => t.terrain = mapDef.zGen(t.x, t.y, mapDef.seed));
 
   // find connected cells
   diagram.links().forEach(link => {
@@ -104,17 +102,14 @@ function poissonTiles(mapDef) {
   return tiles;
 }
 
-function gridTiles(mapDef) {
+function gridTiles(width, height) {
   console.log("Creating tiles...");
   let tiles = [];
 
   // create grid of tiles
-  for (let x = 0; x < mapDef.width; ++x)
-    for (let y = 0; y < mapDef.height; ++y)
+  for (let x = 0; x < width; ++x)
+    for (let y = 0; y < height; ++y)
       tiles.push(Tile([[x,y], [x+1,y], [x+1,y+1], [x,y+1]], tiles.length));
-
-  // define terrain height
-  tiles.forEach(t => t.terrain = mapDef.zGen(t.x, t.y, mapDef.seed));
 
   // find connected tiles
   tiles.forEach((tile, i) => {
@@ -134,8 +129,13 @@ function gridTiles(mapDef) {
 
 function Game(mapDef, turnTime) {
   console.log("Starting new game...");
+
+  let rng = new Alea(mapDef.seed);
+  let tiles = mapDef.tileGen(mapDef.width, mapDef.height, rng);
+  mapDef.terrainGen(tiles, rng);
+
   return Object.assign({
-    tiles: mapDef.tileGen(mapDef),
+    tiles,
     turnTime,
     players: [],
     waitingOn: new Set(),
