@@ -42,7 +42,7 @@ var smallSimplexGrid = {
 };
 
 function simplexGen(x, y, seed) {
-  let z = 1.3;
+  let z = 0.3;
   let octaves = [
     {scale: 0.20, amplitude: 0.8},
     {scale: 0.03, amplitude: 1.0},
@@ -92,10 +92,11 @@ function poissonTiles(mapDef) {
   // find voronoi diagram of points
   let diagram = d3.voronoi().size(size)(points);
   let tiles = diagram.polygons().map((poly, i) => Tile(i, poly));
-    //.filter(poly => mapDef.zGen(...poly.data, mapDef.seed) >= 0); FIXME
+
+  // define terrain height
+  tiles.forEach(t => t.terrain = mapDef.zGen(t.x, t.y, mapDef.seed));
 
   // find connected cells
-  points.forEach(point => point.connected = []);
   diagram.links().forEach(link => {
     tiles[link.source.id].connected.push(link.target.id);
     tiles[link.target.id].connected.push(link.source.id);
@@ -111,8 +112,10 @@ function gridTiles(mapDef) {
   // create grid of tiles
   for (let x = 0; x < mapDef.width; ++x)
     for (let y = 0; y < mapDef.height; ++y)
-      if (mapDef.zGen(x, y, mapDef.seed) >= 0)
-        tiles.push(Tile(tiles.length, [[x,y], [x+1,y], [x+1,y+1], [x,y+1]]));
+      tiles.push(Tile(tiles.length, [[x,y], [x+1,y], [x+1,y+1], [x,y+1]]));
+
+  // define terrain height
+  tiles.forEach(t => t.terrain = mapDef.zGen(t.x, t.y, mapDef.seed));
 
   // find connected tiles
   tiles.forEach((tile, i) => {
@@ -318,7 +321,7 @@ function deletePlayerUnits(region, player) {
 }
 
 function findEmptyTiles(tiles) {
-  return tiles.filter(tile => tile.units.length === 0);
+  return tiles.filter(t => t.terrain >= 0 && t.units.length === 0);
 }
 
 function addPlayer(game, player) {

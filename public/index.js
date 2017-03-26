@@ -107,7 +107,7 @@ function draw() {
   context.lineWidth = 2;
   context.fillStyle = "#4f9627";
   context.strokeStyle = "#3f751f";
-  tiles.forEach(drawTile);
+  tiles.filter(t => t.terrain >= 0).forEach(drawTile);
 
   // buildings
   context.strokeStyle = "#5b2000";
@@ -152,7 +152,8 @@ function initCanvas() {
 function addCommand(origin, target) {
   // check the command is between connected tiles
   if ( ![origin.id, ...origin.connected].includes(target.id)
-    || ![player, undefined].includes(origin.player) )
+    || ![player, undefined].includes(origin.player)
+    || target.terrain < 0 )
     return;
 
   let targets = commands.get(origin) || commands.set(origin, []).get(origin);
