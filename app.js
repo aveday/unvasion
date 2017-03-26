@@ -9,21 +9,33 @@ var evenChunks = require("even-chunks");
 var Alea = require("alea");
 var SimplexNoise = require("simplex-noise");
 var Poisson = require("poisson-disk-sampling");
-
-var d3 = require("d3-voronoi");
-
-var rng = new Alea(0);
-var noise = new SimplexNoise(rng);
+var voronoi = require("d3-voronoi").voronoi;
 
 const TILE_MAX = 36;
 const UNIT_COEFFICIENT = 2;
 const SPAWN_REQ = TILE_MAX / UNIT_COEFFICIENT;
+
+var rng = new Alea(0);
+var noise = new SimplexNoise(rng);
 
 var autoreload = true;
 var port  = 4000;
 var games = [];
 var sockets = [];
 var gameTimeouts = new Map();
+
+/***********
+ Server Init
+ ***********/
+
+app.use(express.static(__dirname + "/public"));
+app.get("/", (req, res) => res.render("public/index.html"));
+io.on("connection", playerSession);
+http.listen(port, () => console.log("Server started on port", port));
+
+/***************
+ Map Definitions
+ ***************/
 
 var poissonVoronoi = {
   tileGen: poissonTiles,
@@ -41,6 +53,23 @@ var smallSimplexGrid = {
   height: 6,
 };
 
+/**************
+ Map Generation
+ **************/
+
+function Tile(points, id) {
+  let x = average(...points.map(p => p[0]));
+  let y = average(...points.map(p => p[1]));
+  return {
+    id, x, y, points,
+    units: [],
+    connected: [],
+    attackedBy: [],
+    inbound: [],
+    building: 0,
+  };
+}
+
 function simplexGen(x, y, seed) {
   let z = 0.3;
   let octaves = [
@@ -52,36 +81,6 @@ function simplexGen(x, y, seed) {
   return z;
 }
 
-function Game(mapDef, turnTime) {
-  console.log("Starting new game...");
-  return Object.assign({
-    tiles: mapDef.tileGen(mapDef),
-    turnTime,
-    players: [],
-    waitingOn: new Set(),
-    nextId: 0,
-    turnCount: 0,
-  }, mapDef);
-}
-
-function Tile(points, id) {
-  let x = average(...points.map(p => p[0]));
-  let y = average(...points.map(p => p[1]));
-  return {
-    id, x, y, points,
-    units: [],
-    connected: [],
-    attackedBy: [], //TODO consolidate attackedBy and inbound?
-    inbound: [],
-    building: 0,
-  };
-}
-
-function setUnits(game, tile, player, n) {
-  tile.player = player;
-  tile.units = Array.from({length: n}, () => game.nextId++);
-}
-
 function poissonTiles(mapDef) {
   let size = [mapDef.width, mapDef.height];
   // generate poisson disk distribution
@@ -90,7 +89,7 @@ function poissonTiles(mapDef) {
   points.forEach((point, i) => point.id = i);
 
   // find voronoi diagram of points
-  let diagram = d3.voronoi().size(size)(points);
+  let diagram = voronoi().size(size)(points);
   let tiles = diagram.polygons().map(Tile);
 
   // define terrain height
@@ -129,47 +128,20 @@ function gridTiles(mapDef) {
   return tiles;
 }
 
-function handleError(err, html) {
-  console.warn(err, html);
-}
+/************
+ Game Control
+ ************/
 
-function mainPage(req, res) {
-  res.render("public/index.html", handleError);
-}
-
-function playerSession(socket) {
-  // tell client to refresh on file changes (dev)
-  if (autoreload === true) {
-    autoreload = false;
-    io.emit("reload");
-    return;
-  }
-
-  let player = newPlayer(socket);
-  // start a new game session if there aren't any
-  if (games.length === 0)
-    games.push(Game(poissonVoronoi, 4000));
-  let game = games[0];
-
-  // add the player
-  addPlayer(game, player);
-  io.emit("msg", "Connected to server");
-
-  socket.emit("sendPlayerId", player);
-  io.emit("sendState", game);
-
-  socket.on("ready", () => startGame(game, player));
-  socket.on("sendCommands", cmdIds => loadCommands(game, player, cmdIds));
-
-  socket.on("msg", msg => console.log(msg));
-  socket.on("disconnect", () => removePlayer(game, player));
-}
-
-function startGame(game, player) {
-  console.log(chalk.grey("Player %s ready"), player);
-  game.waitingOn.delete(player);
-  if (game.waitingOn.size === 0)
-    startTurn(game);
+function Game(mapDef, turnTime) {
+  console.log("Starting new game...");
+  return Object.assign({
+    tiles: mapDef.tileGen(mapDef),
+    turnTime,
+    players: [],
+    waitingOn: new Set(),
+    nextId: 0,
+    turnCount: 0,
+  }, mapDef);
 }
 
 function startTurn(game) {
@@ -214,6 +186,60 @@ function loadCommands(game, player, commandIds) {
   if (!game.waitingOn.size) run(game);
 }
 
+/**************
+ Tile Utilities
+ **************/
+
+function areEnemies(tile1, tile2) {
+  return tile1.player !== tile2.player
+      && tile1.units.length
+      && tile2.units.length;
+}
+
+function findEmptyTiles(tiles) {
+  return tiles.filter(t => t.terrain >= 0 && t.units.length === 0);
+}
+
+function setUnits(game, tile, player, n) {
+  tile.player = player;
+  tile.units = Array.from({length: n}, () => game.nextId++);
+}
+
+/**********
+ Simulation
+ **********/
+
+function run(game) {
+  clearTimeout(gameTimeouts.get(game));
+  console.log(chalk.cyan("Running turn %s"), game.turnCount++);
+  let occupied = game.tiles.filter(tile => tile.units.length > 0);
+
+  // execute interactions
+  occupied.forEach(runInteractions);
+  occupied.forEach(calculateFatalities);
+
+  // execute movement
+  occupied.forEach(sendUnits);
+  game.tiles.forEach(receiveUnits);
+
+  // create new units in occupied houses
+  game.tiles.filter(t => t.building === 1 && t.units.length >= SPAWN_REQ)
+    .forEach(tile => {
+      tile.units.push(game.nextId++);
+    });
+
+  // kill units in overpopulated tiles
+  game.tiles.filter(t => t.units.length > TILE_MAX)
+    .forEach(tile => {
+      let damage = (tile.units.length - TILE_MAX) / UNIT_COEFFICIENT;
+      tile.units.splice(0, Math.ceil(damage));
+    });
+
+  // send the updates to the players and start a new turn
+  io.emit("sendState", game); // FIXME to just send update
+  startTurn(game);
+}
+
 function setGroups(tile, targets, builds) {
   targets = targets || [tile];
   tile.groups = evenChunks(tile.units, targets.length);
@@ -222,12 +248,6 @@ function setGroups(tile, targets, builds) {
     group.target = targets[i];
     group.build = builds[i];
   });
-}
-
-function areEnemies(tile1, tile2) {
-  return tile1.player !== tile2.player
-      && tile1.units.length
-      && tile2.units.length;
 }
 
 function runInteractions(tile) {
@@ -281,35 +301,69 @@ function receiveUnits(tile) {
   tile.player = tile.units.length ? victor.player : undefined;
 }
 
-function run(game) {
-  clearTimeout(gameTimeouts.get(game));
-  console.log(chalk.cyan("Running turn %s"), game.turnCount++);
-  let occupied = game.tiles.filter(tile => tile.units.length > 0);
+/*****************
+ Player Management
+ *****************/
 
-  // execute interactions
-  occupied.forEach(runInteractions);
-  occupied.forEach(calculateFatalities);
+function playerSession(socket) {
+  // tell client to refresh on file changes (dev)
+  if (autoreload === true) {
+    autoreload = false;
+    io.emit("reload");
+    return;
+  }
 
-  // execute movement
-  occupied.forEach(sendUnits);
-  game.tiles.forEach(receiveUnits);
+  let player = newPlayer(socket);
+  // start a new game session if there aren't any
+  if (games.length === 0)
+    games.push(Game(poissonVoronoi, 4000));
+  let game = games[0];
 
-  // create new units in occupied houses
-  game.tiles.filter(t => t.building === 1 && t.units.length >= SPAWN_REQ)
-    .forEach(tile => {
-      tile.units.push(game.nextId++);
-    });
+  // add the player
+  addPlayer(game, player);
+  io.emit("msg", "Connected to server");
 
-  // kill units in overpopulated tiles
-  game.tiles.filter(t => t.units.length > TILE_MAX)
-    .forEach(tile => {
-      let damage = (tile.units.length - TILE_MAX) / UNIT_COEFFICIENT;
-      tile.units.splice(0, Math.ceil(damage));
-    });
+  socket.emit("sendPlayerId", player);
+  io.emit("sendState", game);
 
-  // send the updates to the players and start a new turn
-  io.emit("sendState", game); // FIXME to just send update
-  startTurn(game);
+  socket.on("ready", () => readyPlayer(game, player));
+  socket.on("sendCommands", cmdIds => loadCommands(game, player, cmdIds));
+
+  socket.on("msg", msg => console.log(msg));
+  socket.on("disconnect", () => removePlayer(game, player));
+}
+
+function newPlayer(socket) {
+  let player = sockets.push(socket) - 1;
+  console.log(chalk.blue("Player %s connected"), player);
+  return player;
+}
+
+function addPlayer(game, player) {
+  game.players.push(player);
+  game.waitingOn.add(player);
+  console.log(chalk.yellow("Player %s joined game"), player);
+
+  // start on random empty tile with 24 units (dev)
+  let empty = findEmptyTiles(game.tiles);
+  let startingTile = empty[Math.floor(Math.random() * empty.length)];
+  setUnits(game, startingTile, player, 24);
+  return player;
+}
+
+function readyPlayer(game, player) {
+  console.log(chalk.grey("Player %s ready"), player);
+  game.waitingOn.delete(player);
+  if (game.waitingOn.size === 0)
+    startTurn(game);
+}
+
+function removePlayer(game, player) {
+  console.log(chalk.red("Player %s disconnected"), player);
+  game.players = game.players.filter(p => p !== player);
+  game.waitingOn.delete(player);
+  deletePlayerUnits(game.tiles, player);
+  io.emit("sendState", game);
 }
 
 function deletePlayerUnits(region, player) {
@@ -321,35 +375,9 @@ function deletePlayerUnits(region, player) {
   }
 }
 
-function findEmptyTiles(tiles) {
-  return tiles.filter(t => t.terrain >= 0 && t.units.length === 0);
-}
-
-function addPlayer(game, player) {
-  game.players.push(player);
-  game.waitingOn.add(player);
-  console.log(chalk.yellow("Player %s joined game"), player);
-
-  // start on random empty tile with 24 units (dev)
-  let empty = findEmptyTiles(game.tiles);
-  let emptyTile = empty[Math.floor(Math.random() * empty.length)];
-  setUnits(game, emptyTile, player, 24);
-  return player;
-}
-
-function newPlayer(socket) {
-  let player = sockets.push(socket) - 1;
-  console.log(chalk.blue("Player %s connected"), player);
-  return player;
-}
-
-function removePlayer(game, player) {
-  console.log(chalk.red("Player %s disconnected"), player);
-  game.players = game.players.filter(p => p !== player);
-  game.waitingOn.delete(player);
-  deletePlayerUnits(game.tiles, player);
-  io.emit("sendState", game);
-}
+/*****************
+ Utility Functions
+ *****************/
 
 function distSq(x1, y1, x2, y2) {
   let dx = x1 - x2;
@@ -360,11 +388,4 @@ function distSq(x1, y1, x2, y2) {
 function average(...values) {
   return values.reduce((acc, val) => acc + val) / values.length;
 }
-
-// server init
-app.use(express.static(__dirname + "/public"));
-app.get("/", mainPage);
-io.on("connection", playerSession);
-
-http.listen(port, () => console.log("Server started on port", port));
 
