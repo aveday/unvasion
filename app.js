@@ -53,9 +53,8 @@ function Game(mapDef, turnTime) {
 }
 
 function Tile(id, points) {
-  let x = points.map(p => p[0]).reduce((a, v) => a + v, 0) / points.length;
-  let y = points.map(p => p[1]).reduce((a, v) => a + v, 0) / points.length;
-  points.forEach(point => { point[0] -= x; point[1] -= y });
+  let x = average(...points.map(p => p[0]));
+  let y = average(...points.map(p => p[1]));
   return {
     id, x, y, points,
     units: [],
@@ -324,6 +323,10 @@ function distSq(x1, y1, x2, y2) {
   let dx = x1 - x2;
   let dy = y1 - y2;
   return dx*dx + dy*dy;
+}
+
+function average(...values) {
+  return values.reduce((acc, val) => acc + val) / values.length;
 }
 
 // server init
