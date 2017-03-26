@@ -187,7 +187,8 @@ function endTurn(game) {
 
 function loadCommands(game, player, commandIds) {
   // load the commands from the player messages
-  console.log("Player %s sent %s commands", player, nCommands(commandIds));
+  let nCommands = commandIds.reduce((a, v) => a + v[1].length, 0);
+  console.log("Player %s sent %s commands", player, nCommands);
   // TODO properly validate commands (eg: targets <= units.length)
 
   // ignore dupes //TODO safely allow updated commands
@@ -348,12 +349,6 @@ function removePlayer(game, player) {
   game.waitingOn.delete(player);
   deletePlayerUnits(game.tiles, player);
   io.emit("sendState", game);
-}
-
-function nCommands(commands) {
-  let n = 0;
-  commands.forEach(targets => n += targets.length);
-  return n;
 }
 
 function distSq(x1, y1, x2, y2) {
