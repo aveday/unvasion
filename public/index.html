@@ -9,6 +9,7 @@
   <p>
     Players: <span id="playerCount">0</span> &emsp;
     <button type="button" onclick="socket.emit('ready')"> start game</button>
+    <button type="button" onclick="usePixelArt = !usePixelArt; draw()"> graphics</button>
   </p>
 </header>
 
@@ -17,5 +18,8 @@
 </div>
 
 <canvas id="canvas">
+<img id="soldier" src="soldier.png"></img>
+<img id="water" src="water.png"></img>
+<img id="grass" src="grass.png"></img>
 <script src="util.js"></script>
 <script src="index.js"></script>

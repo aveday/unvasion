@@ -37,9 +37,9 @@ http.listen(port, () => console.log("Server started on port", port));
 var poissonVoronoi = {
   tileGen: poissonTiles,
   terrainGen: simplexTerrain,
-  width: 20,
-  height: 20,
-  seed: 1121,
+  width: 16,
+  height: 25,
+  seed: 3,
 };
 
 var smallSimplexGrid = {
@@ -58,7 +58,8 @@ function Tile(points, id) {
   let x = average(...points.map(p => p[0]));
   let y = average(...points.map(p => p[1]));
   return {
-    id, x, y, points,
+    id, x, y,
+    points: points.map(p => [p[0]-x, p[1]-y]),
     units: [],
     connected: [],
     attackedBy: [],
@@ -68,7 +69,7 @@ function Tile(points, id) {
 }
 
 function simplexTerrain(tiles, rng) {
-  let offset = 0.3;
+  let offset = 0.1;
   let octaves = [
     {scale: 0.20, amp: 0.8},
     {scale: 0.03, amp: 1.0},

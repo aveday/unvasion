@@ -2,6 +2,7 @@
 
 window.addEventListener("resize", initCanvas, false);
 let canvas = document.getElementById("canvas");
+let mCanvas = undefined;
 let panel = {
   header: document.getElementsByTagName("header")[0],
   progressBar: document.getElementById("progressBar"),
@@ -14,20 +15,23 @@ const UNIT_SIZE = 0.04;
 const GAP_SIZE = 0.05;
 const DASH_SIZE = 0.1;
 
+let usePixelArt = true;
 let playerColors = ["blue", "red"];
 
 let context = canvas.getContext("2d");
 let socket = io();
 
 let player = 0;
-let tileSize;
 let commands = new Map();
 let mouse = {};
+
+let appu = 16;
+let sppu;
 
 let tiles, players, gameWidth, gameHeight;
 
 function corner(tile) {
-  return [(tile.x - 0.5) * tileSize, (tile.y - 0.5) * tileSize];
+  return [(tile.x - 0.5) * sppu, (tile.y - 0.5) * sppu];
 }
 
 function playerColor(player) {
@@ -36,13 +40,13 @@ function playerColor(player) {
 }
 
 function drawTile(tile) {
-  context.fillShape(0, 0, tile.points, tileSize, 0);
+  context.fillShape(tile.x * sppu, tile.y * sppu, tile.points, sppu, 0);
   context.stroke();
 }
 
 function drawBuilding(tile) {
-  let gap = GAP_SIZE * tileSize;
-  let size = tileSize - gap * 2;
+  let gap = GAP_SIZE * sppu;
+  let size = sppu - gap * 2;
   let part = size / BUILDING_PARTS;
   let [x, y] = corner(tile).map(c => c + gap);
 
@@ -57,8 +61,8 @@ function drawBuilding(tile) {
 function drawPlans(targets, origin) {
   targets.forEach(target => {
     if (target === origin && origin.player === undefined) {
-      let gap = GAP_SIZE * tileSize / 2;
-      let size = tileSize - gap * 2;
+      let gap = GAP_SIZE * sppu / 2;
+      let size = sppu - gap * 2;
       let [x, y] = corner(origin).map(c => c + gap);
       context.strokeRect(x, y, size, size);
     }
@@ -76,10 +80,10 @@ function drawUnits(tile) {
 
   context.beginPath();
   for (let n = m; n < tile.units.length + m; ++n) {
-    let ux = x + (Math.floor(n / e) + 0.5)/e *  tileSize;
-    let uy = y + (n % e + 0.5)/e *  tileSize;
+    let ux = x + (Math.floor(n / e) + 0.5)/e *  sppu;
+    let uy = y + (n % e + 0.5)/e *  sppu;
     context.moveTo(ux, uy);
-    context.arc(ux, uy, UNIT_SIZE * tileSize, 0, 2 * Math.PI);
+    context.arc(ux, uy, UNIT_SIZE * sppu, 0, 2 * Math.PI);
   }
   context.closePath();
   context.fill();
@@ -91,35 +95,53 @@ function drawMoves(targets, origin) {
   //TODO fill red for attacks
   targets.forEach(target =>
     context.fillShape(
-      tileSize * (target.x + origin.x) / 2,
-      tileSize * (target.y + origin.y) / 2,
+      sppu * (target.x + origin.x) / 2,
+      sppu * (target.y + origin.y) / 2,
       target === origin ? shapes.square : shapes.arrow,
-      tileSize / 8 / Math.sqrt(targets.length),
+      sppu / 8 / Math.sqrt(targets.length),
       Math.atan2(target.y - origin.y, target.x - origin.x)));
 }
 
 function draw() {
-  // water
-  fillCanvas(canvas, "#3557a0");
+  if (usePixelArt) {
+    if (!mCanvas)
+      mCanvas = drawMap();
 
-  // tiles
-  context.globalAlpha = 1;
-  context.lineWidth = 2;
-  context.fillStyle = "#4f9627";
-  context.strokeStyle = "#3f751f";
-  tiles.filter(t => t.terrain >= 0).forEach(drawTile);
+    context.imageSmoothingEnabled = false;
+    context.drawImage(mCanvas, 0, 0, gameWidth * sppu, gameHeight * sppu)
 
-  // buildings
-  context.strokeStyle = "#5b2000";
-  context.fillStyle = "#9b500d";
-  tiles.filter(tile => tile.building).forEach(drawBuilding);
+    let soldier = document.getElementById("soldier");
+    tiles.filter(tile => tile.units.length).forEach(tile => {
+      context.drawImage(soldier,
+        tile.x * sppu,
+        tile.y * sppu,
+        soldier.width * sppu / appu,
+        soldier.height * sppu / appu);
+    });
 
-  // units
-  context.lineWidth = 0;
-  tiles.filter(tile => tile.units.length).forEach(drawUnits);
+  } else {
+    // water
+    fillCanvas(canvas, "#3557a0");
+
+    // tiles
+    context.globalAlpha = 1;
+    context.lineWidth = 2;
+    context.fillStyle = "#4f9627";
+    context.strokeStyle = "#3f751f";
+    tiles.filter(t => t.terrain >= 0).forEach(drawTile);
+
+    // buildings
+    context.strokeStyle = "#5b2000";
+    context.fillStyle = "#9b500d";
+    tiles.filter(tile => tile.building).forEach(drawBuilding);
+
+    // units
+    context.lineWidth = 0;
+    tiles.filter(tile => tile.units.length).forEach(drawUnits);
+  }
 
   // building commands
-  context.setLineDash([tileSize*DASH_SIZE, tileSize*DASH_SIZE]);
+  context.setLineDash([sppu*DASH_SIZE, sppu*DASH_SIZE]);
   context.strokeStyle = "yellow";
   commands.forEach(drawPlans);
   context.setLineDash([]);
@@ -129,6 +151,7 @@ function draw() {
   context.lineWidth = 0;
   context.fillStyle = "yellow";
   commands.forEach(drawMoves);
+  context.globalAlpha = 1;
 
 }
 
@@ -137,11 +160,13 @@ function initCanvas() {
   // find largest possible tilesize while still fitting entire map
   let maxHeight = window.innerHeight * 0.95 - panel.header.offsetHeight;
   let maxWidth = window.innerWidth * 0.95;
-  tileSize = Math.min(maxHeight / gameHeight, maxWidth / gameWidth);
+
+  sppu = Math.min(maxHeight / gameHeight, maxWidth / gameWidth);
+  sppu = Math.floor(sppu / appu) * appu;
 
   // restrict canvas size
-  canvas.width = gameWidth * tileSize;
-  canvas.height = gameHeight * tileSize;
+  canvas.width = gameWidth * sppu;
+  canvas.height = gameHeight * sppu;
 
   //TODO this automatically by putting both elements in a div
   panel.progressBorder.style.width = canvas.width + "px";
@@ -223,12 +248,12 @@ function pointInTile(tile, x, y) {
   context.beginPath()
   tile.points.forEach(point => context.lineTo(...point));
   context.closePath();
-  return context.isPointInPath(x / tileSize, y / tileSize);
+  return context.isPointInPath(x / sppu, y / sppu);
 }
 
 function getClickedTile(e) {
   let [canvasX, canvasY] = elementCoords(canvas, e.pageX, e.pageY);
-  let [x, y] = [canvasX / tileSize, canvasY / tileSize];
+  let [x, y] = [canvasX / sppu, canvasY / sppu];
   let closest = closestPoint(x, y, tiles);
   //let tile = pointInTile(closest, x, y) ? closest : undefined; FIXME
   return closest;
@@ -252,3 +277,94 @@ socket.on("sendState", loadState);
 socket.on("startTurn", startTurn);
 socket.on("requestCommands", sendCommands);
 
+// Dawnbringer 16
+let Black = [20,12,28];
+let DarkRed = [68,36,52];
+let DarkBlue = [48,52,10];
+let DarkGray = [78,74,78];
+let Brown = [133,76,4];
+let DarkGreen  = [52,101,3];
+let Red = [208,70,7];
+let LightGray = [117,113,97];
+let LightBlue = [89,125,206];
+let Orange = [210,125,44];
+let BlueGray = [133,149,16];
+let LightGreen = [109,170,44];
+let Peach = [210,170,15];
+let Cyan = [109,194,20];
+let Yellow  = [218,212,94];
+let White = [222,238,21];
+
+
+/*********
+ Pixel map
+ *********/
+function drawMap() {
+
+  // create canvas
+  let canvas = document.createElement("canvas");
+  let mContext = canvas.getContext("2d");
+  canvas.width = gameWidth * appu;
+  canvas.height = gameHeight * appu;
+
+  // water
+  let water = document.getElementById("water");
+  let waterPattern = mContext.createPattern(water, 'repeat');
+  mContext.fillStyle = waterPattern;
+  mContext.fillRect(0, 0, canvas.width, canvas.height);
+
+  // fill grass
+  let grass = document.getElementById("grass");
+  let grassPattern = mContext.createPattern(grass, 'repeat');
+  mContext.fillStyle = grassPattern;
+  tiles.filter(t => t.terrain >= 0).forEach(t => {
+    let pos = [t.x, t.y].map(c => Math.floor(c * appu));
+    let points = t.points.map(p => p.map(c => Math.floor(c*appu - 0.01)));
+
+    mContext.fillShape(...pos, points, 1, 0);
+  });
+
+  Array.prototype.getEdges = function(pos) {
+    return pairs(this).map(pair =>
+      [ pos[0] + pair[0][0], pos[1] + pair[0][1],
+        pos[0] + pair[1][0], pos[1] + pair[1][1]]);
+  }
+
+  // construct tile borders
+  let imageData = mContext.getImageData(0, 0, canvas.width, canvas.height);
+  tiles
+      .filter(t => t.terrain >= 0)
+      .sort((t1, t2) => t1.y - t2.y)
+      .forEach(t => {
+    let pos = [t.x, t.y].map(c => Math.floor(c * appu));
+    let points = t.points.map(p => p.map(c => Math.floor(c * appu - 0.01)));
+
+    points
+        .map(p => p.map(c => Math.floor(c*0.8)))
+        .getEdges(pos)
+        .forEach(edge => bline(imageData, 0.3, ...edge, ...Yellow, 255));
+
+    points
+        .map(p => [p[0], p[1] + 1])
+        .getEdges(pos)
+        .filter(edge => edge[0] < edge[2])
+        .forEach(edge => bline(imageData, 0.9, ...edge, ...Brown, 255));
+
+    points
+        .map(p => [p[0], p[1] + 1])
+        .getEdges(pos)
+        .filter(edge => edge[0] > edge[2])
+        .forEach(edge => bline(imageData, 1, ...edge, ...LightGreen, 255));
+
+    points
+        .getEdges(pos)
+        .forEach(edge => {
+      bline(imageData, 1.0, ...edge, ...Brown, 255);
+      bline(imageData, 0.5, ...edge, ...Orange, 255);
+      bline(imageData, 0.5, ...edge, ...DarkGreen, 255);
+    });
+
+  });
+  mContext.putImageData(imageData, 0, 0);
+  return canvas;
+}
