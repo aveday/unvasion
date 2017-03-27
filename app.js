@@ -38,7 +38,7 @@ var poissonVoronoi = {
   tileGen: poissonTiles,
   terrainGen: simplexTerrain,
   width: 16,
-  height: 25,
+  height: 16,
   seed: 3,
 };
 
@@ -58,8 +58,7 @@ function Tile(points, id) {
   let x = average(...points.map(p => p[0]));
   let y = average(...points.map(p => p[1]));
   return {
-    id, x, y,
-    points: points.map(p => [p[0]-x, p[1]-y]),
+    id, x, y, points,
     units: [],
     connected: [],
     attackedBy: [],

@@ -16,6 +16,8 @@ const GAP_SIZE = 0.05;
 const DASH_SIZE = 0.1;
 
 let usePixelArt = true;
+let blines = true;
+
 let playerColors = ["blue", "red"];
 
 let context = canvas.getContext("2d");
@@ -40,7 +42,7 @@ function playerColor(player) {
 }
 
 function drawTile(tile) {
-  context.fillShape(tile.x * sppu, tile.y * sppu, tile.points, sppu, 0);
+  context.fillShape(0, 0, tile.points, sppu, 0);
   context.stroke();
 }
 
@@ -299,6 +301,7 @@ let White = [222,238,21];
 /*********
  Pixel map
  *********/
+
 function drawMap() {
 
   // create canvas
@@ -309,62 +312,53 @@ function drawMap() {
 
   // water
   let water = document.getElementById("water");
-  let waterPattern = mContext.createPattern(water, 'repeat');
-  mContext.fillStyle = waterPattern;
+  mContext.fillStyle = mContext.createPattern(water, 'repeat');
   mContext.fillRect(0, 0, canvas.width, canvas.height);
 
   // fill grass
   let grass = document.getElementById("grass");
-  let grassPattern = mContext.createPattern(grass, 'repeat');
-  mContext.fillStyle = grassPattern;
+  mContext.fillStyle = mContext.createPattern(grass, 'repeat');
   tiles.filter(t => t.terrain >= 0).forEach(t => {
-    let pos = [t.x, t.y].map(c => Math.floor(c * appu));
     let points = t.points.map(p => p.map(c => Math.floor(c*appu - 0.01)));
-
-    mContext.fillShape(...pos, points, 1, 0);
+    mContext.fillShape(0, 0, points, 1, 0);
   });
 
-  Array.prototype.getEdges = function(pos) {
-    return pairs(this).map(pair =>
-      [ pos[0] + pair[0][0], pos[1] + pair[0][1],
-        pos[0] + pair[1][0], pos[1] + pair[1][1]]);
+  function edgesFromCorners(val, i, arr) {
+    return [...val, ...arr[(i + 1) % arr.length]];
   }
 
   // construct tile borders
-  let imageData = mContext.getImageData(0, 0, canvas.width, canvas.height);
+  let mData = mContext.getImageData(0, 0, canvas.width, canvas.height);
+
   tiles
-      .filter(t => t.terrain >= 0)
-      .sort((t1, t2) => t1.y - t2.y)
-      .forEach(t => {
-    let pos = [t.x, t.y].map(c => Math.floor(c * appu));
-    let points = t.points.map(p => p.map(c => Math.floor(c * appu - 0.01)));
+  .filter(t => t.terrain >= 0)
+  .sort((t1, t2) => t1.y - t2.y)
+  .forEach(t => {
+    let corners = t.points.map(p => p.map(c => Math.floor(c * appu - 0.01)));
+    let edges = corners.map(edgesFromCorners);
+    
+    if (blines) {
+      edges
+        .forEach(edge => bline(mData, 0.3, ...edge, ...Yellow));
 
-    points
-        .map(p => p.map(c => Math.floor(c*0.8)))
-        .getEdges(pos)
-        .forEach(edge => bline(imageData, 0.3, ...edge, ...Yellow, 255));
-
-    points
-        .map(p => [p[0], p[1] + 1])
-        .getEdges(pos)
+      edges
+        .map(e => [e[0], e[1] + 1, e[2], e[3] + 1])
         .filter(edge => edge[0] < edge[2])
-        .forEach(edge => bline(imageData, 0.9, ...edge, ...Brown, 255));
+        .forEach(edge => bline(mData, 0.9, ...edge, ...Brown));
 
-    points
-        .map(p => [p[0], p[1] + 1])
-        .getEdges(pos)
+      edges
+        .map(e => [e[0], e[1] + 1, e[2], e[3] + 1])
         .filter(edge => edge[0] > edge[2])
-        .forEach(edge => bline(imageData, 1, ...edge, ...LightGreen, 255));
+        .forEach(edge => bline(mData, 1, ...edge, 91, 141, 23));
 
-    points
-        .getEdges(pos)
+      edges
         .forEach(edge => {
-      bline(imageData, 1.0, ...edge, ...Brown, 255);
-      bline(imageData, 0.5, ...edge, ...Orange, 255);
-      bline(imageData, 0.5, ...edge, ...DarkGreen, 255);
-    });
-
+          bline(mData, 1.0, ...edge, ...Brown, 255);
+          bline(mData, 0.5, ...edge, ...Orange, 255);
+          bline(mData, 0.5, ...edge, ...DarkGreen, 255);
+      });
+    }
   });
-  mContext.putImageData(imageData, 0, 0);
+  mContext.putImageData(mData, 0, 0);
   return canvas;
 }

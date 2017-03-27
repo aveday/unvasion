@@ -9,7 +9,8 @@
   <p>
     Players: <span id="playerCount">0</span> &emsp;
     <button type="button" onclick="socket.emit('ready')"> start game</button>
-    <button type="button" onclick="usePixelArt = !usePixelArt; draw()"> graphics</button>
+    <button type="button" onclick="usePixelArt = !usePixelArt; draw()"> pixels</button>
+    <button type="button" onclick="blines = !blines; mCanvas = drawMap(); draw()"> blines</button>
   </p>
 </header>
 
@@ -18,8 +19,9 @@
 </div>
 
 <canvas id="canvas">
+<img id="tileset" src="tileset.png"></img>
 <img id="soldier" src="soldier.png"></img>
-<img id="water" src="water.png"></img>
-<img id="grass" src="grass.png"></img>
+<img id="water" src="water2.png"></img>
+<img id="grass" src="grass2.png"></img>
 <script src="util.js"></script>
 <script src="index.js"></script>
