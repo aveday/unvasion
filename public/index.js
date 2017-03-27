@@ -2,7 +2,10 @@
 
 window.addEventListener("resize", initCanvas, false);
 let canvas = document.getElementById("canvas");
-let mCanvas = undefined;
+
+let map = new Image();
+map.onload = initCanvas;
+
 let panel = {
   header: document.getElementsByTagName("header")[0],
   progressBar: document.getElementById("progressBar"),
@@ -27,8 +30,7 @@ let player = 0;
 let commands = new Map();
 let mouse = {};
 
-let appu = 16;
-let sppu;
+let appu, sppu;
 
 let tiles, players, gameWidth, gameHeight;
 
@@ -106,11 +108,8 @@ function drawMoves(targets, origin) {
 
 function draw() {
   if (usePixelArt) {
-    if (!mCanvas)
-      mCanvas = drawMap();
-
     context.imageSmoothingEnabled = false;
-    context.drawImage(mCanvas, 0, 0, gameWidth * sppu, gameHeight * sppu)
+    context.drawImage(map, 0, 0, gameWidth * sppu, gameHeight * sppu)
 
     let soldier = document.getElementById("soldier");
     tiles.filter(tile => tile.units.length).forEach(tile => {
@@ -223,10 +222,11 @@ function sendCommands() {
 
 function loadState(game) {
   [gameWidth, gameHeight] = [game.width, game.height];
+  appu = game.appu;
   players = game.players;
   tiles = game.tiles;
+  map.src = game.mapDataURL;
   panel.playerCount.innerHTML = players.length;
-  initCanvas(); //TODO only init only the first load, else draw
 }
 
 progressBar.start = function(turnTime) {
@@ -279,86 +279,3 @@ socket.on("sendState", loadState);
 socket.on("startTurn", startTurn);
 socket.on("requestCommands", sendCommands);
 
-// Dawnbringer 16
-let Black = [20,12,28];
-let DarkRed = [68,36,52];
-let DarkBlue = [48,52,10];
-let DarkGray = [78,74,78];
-let Brown = [133,76,4];
-let DarkGreen  = [52,101,3];
-let Red = [208,70,7];
-let LightGray = [117,113,97];
-let LightBlue = [89,125,206];
-let Orange = [210,125,44];
-let BlueGray = [133,149,16];
-let LightGreen = [109,170,44];
-let Peach = [210,170,15];
-let Cyan = [109,194,20];
-let Yellow  = [218,212,94];
-let White = [222,238,21];
-
-
-/*********
- Pixel map
- *********/
-
-function drawMap() {
-
-  // create canvas
-  let canvas = document.createElement("canvas");
-  let mContext = canvas.getContext("2d");
-  canvas.width = gameWidth * appu;
-  canvas.height = gameHeight * appu;
-
-  // water
-  let water = document.getElementById("water");
-  mContext.fillStyle = mContext.createPattern(water, 'repeat');
-  mContext.fillRect(0, 0, canvas.width, canvas.height);
-
-  // fill grass
-  let grass = document.getElementById("grass");
-  mContext.fillStyle = mContext.createPattern(grass, 'repeat');
-  tiles.filter(t => t.terrain >= 0).forEach(t => {
-    let points = t.points.map(p => p.map(c => Math.floor(c*appu - 0.01)));
-    mContext.fillShape(0, 0, points, 1, 0);
-  });
-
-  function edgesFromCorners(val, i, arr) {
-    return [...val, ...arr[(i + 1) % arr.length]];
-  }
-
-  // construct tile borders
-  let mData = mContext.getImageData(0, 0, canvas.width, canvas.height);
-
-  tiles
-  .filter(t => t.terrain >= 0)
-  .sort((t1, t2) => t1.y - t2.y)
-  .forEach(t => {
-    let corners = t.points.map(p => p.map(c => Math.floor(c * appu - 0.01)));
-    let edges = corners.map(edgesFromCorners);
-    
-    if (blines) {
-      edges
-        .forEach(edge => bline(mData, 0.3, ...edge, ...Yellow));
-
-      edges
-        .map(e => [e[0], e[1] + 1, e[2], e[3] + 1])
-        .filter(edge => edge[0] < edge[2])
-        .forEach(edge => bline(mData, 0.9, ...edge, ...Brown));
-
-      edges
-        .map(e => [e[0], e[1] + 1, e[2], e[3] + 1])
-        .filter(edge => edge[0] > edge[2])
-        .forEach(edge => bline(mData, 1, ...edge, 91, 141, 23));
-
-      edges
-        .forEach(edge => {
-          bline(mData, 1.0, ...edge, ...Brown, 255);
-          bline(mData, 0.5, ...edge, ...Orange, 255);
-          bline(mData, 0.5, ...edge, ...DarkGreen, 255);
-      });
-    }
-  });
-  mContext.putImageData(mData, 0, 0);
-  return canvas;
-}

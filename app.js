@@ -1,5 +1,6 @@
 "use strict";
 
+var fs = require("fs");
 var express = require("express");
 var app = express();
 var http = require("http").Server(app);
@@ -10,6 +11,7 @@ var Alea = require("alea");
 var SimplexNoise = require("simplex-noise");
 var Poisson = require("poisson-disk-sampling");
 var voronoi = require("d3-voronoi").voronoi;
+var Canvas = require('canvas');
 
 const TILE_MAX = 36;
 const UNIT_COEFFICIENT = 2;
@@ -20,6 +22,12 @@ var port  = 4000;
 var games = [];
 var sockets = [];
 var gameTimeouts = new Map();
+
+// TODO load asset directory automatically, maybe async
+const sprites = {
+  water: fs.readFileSync('./public/water2.png'),
+  grass: fs.readFileSync('./public/grass2.png'),
+};
 
 /***********
  Server Init
@@ -39,6 +47,7 @@ var poissonVoronoi = {
   terrainGen: simplexTerrain,
   width: 16,
   height: 16,
+  appu: 16,
   seed: 3,
 };
 
@@ -47,6 +56,7 @@ var smallSimplexGrid = {
   terrainGen: simplexTerrain,
   width: 6,
   height: 6,
+  appu: 16,
   seed: 212,
 };
 
@@ -123,6 +133,65 @@ function gridTiles(width, height) {
   return tiles;
 }
 
+/*********
+ Pixel Map
+ *********/
+
+function buildMapImageURL(width, height, appu, tiles) {
+  // create canvas
+  let canvas = new Canvas(width * appu, height * appu);
+  let context = canvas.getContext('2d');
+
+  // water
+  let water = new Canvas.Image;
+  water.src = sprites.water;
+  context.fillStyle = context.createPattern(water, 'repeat');
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  // fill grass
+  let grass = new Canvas.Image;
+  grass.src = sprites.grass;
+  context.fillStyle = context.createPattern(grass, 'repeat');
+  tiles.filter(t => t.terrain >= 0).forEach(t => {
+    let points = t.points.map(p => p.map(c => Math.floor(c*appu - 0.01)));
+    fillShape(context, 0, 0, points, 1, 0);
+  });
+
+  // construct tile borders
+  let mData = context.getImageData(0, 0, canvas.width, canvas.height);
+
+  tiles
+  .filter(t => t.terrain >= 0)
+  .sort((t1, t2) => t1.y - t2.y)
+  .forEach(t => {
+    let corners = t.points.map(p => p.map(c => Math.floor(c * appu - 0.01)));
+    let edges = corners.map((val, i, arr) =>
+        [...val, ...arr[(i + 1) % arr.length]]);
+
+    edges
+      .forEach(edge => bline(mData, 0.3, ...edge, ...Yellow));
+
+    edges
+      .map(e => [e[0], e[1] + 1, e[2], e[3] + 1])
+      .filter(edge => edge[0] < edge[2])
+      .forEach(edge => bline(mData, 0.9, ...edge, ...Brown));
+
+    edges
+      .map(e => [e[0], e[1] + 1, e[2], e[3] + 1])
+      .filter(edge => edge[0] > edge[2])
+      .forEach(edge => bline(mData, 1, ...edge, 91, 141, 23));
+
+    edges
+      .forEach(edge => {
+        bline(mData, 1.0, ...edge, ...Brown, 255);
+        bline(mData, 0.5, ...edge, ...Orange, 255);
+        bline(mData, 0.5, ...edge, ...DarkGreen, 255);
+    });
+  });
+  context.putImageData(mData, 0, 0);
+  return canvas.toDataURL();
+}
+
 /************
  Game Control
  ************/
@@ -133,9 +202,12 @@ function Game(mapDef, turnTime) {
   let rng = new Alea(mapDef.seed);
   let tiles = mapDef.tileGen(mapDef.width, mapDef.height, rng);
   mapDef.terrainGen(tiles, rng);
+  let mapDataURL = buildMapImageURL(
+    mapDef.width, mapDef.height, mapDef.appu, tiles);
 
   return Object.assign({
     tiles,
+    mapDataURL,
     turnTime,
     players: [],
     waitingOn: new Set(),
@@ -388,4 +460,72 @@ function distSq(x1, y1, x2, y2) {
 function average(...values) {
   return values.reduce((acc, val) => acc + val) / values.length;
 }
+
+// from http://xqt2.com/p/MoreCanvasContext.html
+function fillShape(context, x,y,points,s,t){
+  var px = x + s*(Math.cos(t)*points[0][0] - Math.sin(t)*points[0][1]);
+  var py = y + s*(Math.sin(t)*points[0][0] + Math.cos(t)*points[0][1]);
+  context.beginPath();
+  context.moveTo(px, py);
+  for (var i = 1; i < points.length; ++i){
+    px = x + s*(Math.cos(t)*points[i][0] - Math.sin(t)*points[i][1]);
+    py = y + s*(Math.sin(t)*points[i][0] + Math.cos(t)*points[i][1]);
+    context.lineTo(px, py);
+  }
+  context.closePath();
+  context.fill();
+};
+
+function putPixel(imageData, x, y, r, g, b, a) {
+  if (a === undefined) a = 255;
+  let n = (y * imageData.width + x) * 4;
+  imageData.data[n] = r;
+  imageData.data[n+1] = g;
+  imageData.data[n+2] = b;
+  imageData.data[n+3] = a;
+}
+
+function blinePoints(x0, y0, x1, y1) {
+  var dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+  var dy = Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1; 
+  var err = (dx > dy ? dx : -dy)/2;        
+
+
+  let points = []
+  let attempts = 100
+  while (--attempts) {
+    points.push([x0, y0]);
+
+    if (x0 === x1 && y0 === y1) break;
+    var e2 = err;
+    if (e2 > -dx) { err -= dy; x0 += sx; }
+    if (e2 <  dy) { err += dx; y0 += sy; }
+  }
+  if (!attempts) console.log("bline exhausted");
+  return points;
+}
+
+function bline(imageData, prob, x0, y0, x1, y1, ...color) {
+  blinePoints(x0, y0, x1, y1)
+    .filter(() => Math.random() < prob)
+    .forEach(point => putPixel(imageData, ...point, ...color));
+}
+
+// Dawnbringer 16 colour palette
+let Black = [20,12,28];
+let DarkRed = [68,36,52];
+let DarkBlue = [48,52,10];
+let DarkGray = [78,74,78];
+let Brown = [133,76,4];
+let DarkGreen  = [52,101,3];
+let Red = [208,70,7];
+let LightGray = [117,113,97];
+let LightBlue = [89,125,206];
+let Orange = [210,125,44];
+let BlueGray = [133,149,16];
+let LightGreen = [109,170,44];
+let Peach = [210,170,15];
+let Cyan = [109,194,20];
+let Yellow  = [218,212,94];
+let White = [222,238,21];
 

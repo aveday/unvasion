@@ -96,37 +96,3 @@ String.prototype.hashCode = function() {
   return hash;
 };
 
-function putPixel(imageData, x, y, r, g, b, a) {
-  if (a === undefined) a = 255;
-  let n = (y * imageData.width + x) * 4;
-  imageData.data[n] = r;
-  imageData.data[n+1] = g;
-  imageData.data[n+2] = b;
-  imageData.data[n+3] = a;
-}
-
-function blinePoints(x0, y0, x1, y1) {
-  var dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-  var dy = Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1; 
-  var err = (dx > dy ? dx : -dy)/2;        
-
-
-  let points = []
-  let attempts = 100
-  while (--attempts) {
-    points.push([x0, y0]);
-
-    if (x0 === x1 && y0 === y1) break;
-    var e2 = err;
-    if (e2 > -dx) { err -= dy; x0 += sx; }
-    if (e2 <  dy) { err += dx; y0 += sy; }
-  }
-  if (!attempts) console.log("bline exhausted");
-  return points;
-}
-
-function bline(imageData, prob, x0, y0, x1, y1, ...color) {
-  blinePoints(x0, y0, x1, y1)
-    .filter(() => Math.random() < prob)
-    .forEach(point => putPixel(imageData, ...point, ...color));
-}
