@@ -3,9 +3,6 @@
 window.addEventListener("resize", initCanvas, false);
 let canvas = document.getElementById("canvas");
 
-let map = new Image();
-map.onload = initCanvas;
-
 let panel = {
   header: document.getElementsByTagName("header")[0],
   progressBar: document.getElementById("progressBar"),
@@ -30,9 +27,10 @@ let player = 0;
 let commands = new Map();
 let mouse = {};
 
-let appu, sppu;
+let sppu;
+let map;
 
-let regions, players, gameWidth, gameHeight;
+let regions, players;
 
 function corner(region) {
   return [(region.x - 0.5) * sppu, (region.y - 0.5) * sppu];
@@ -109,15 +107,15 @@ function drawMoves(targets, origin) {
 function draw() {
   if (usePixelArt) {
     context.imageSmoothingEnabled = false;
-    context.drawImage(map, 0, 0, gameWidth * sppu, gameHeight * sppu)
+    context.drawImage(map.img, 0, 0, map.width * sppu, map.height * sppu)
 
     let soldier = document.getElementById("soldier");
     regions.filter(region => region.units.length).forEach(region => {
       context.drawImage(soldier,
         region.x * sppu,
         region.y * sppu,
-        soldier.width * sppu / appu,
-        soldier.height * sppu / appu);
+        soldier.width * sppu / map.appu,
+        soldier.height * sppu / map.appu);
     });
 
   } else {
@@ -162,12 +160,12 @@ function initCanvas() {
   let maxHeight = window.innerHeight * 0.95 - panel.header.offsetHeight;
   let maxWidth = window.innerWidth * 0.95;
 
-  sppu = Math.min(maxHeight / gameHeight, maxWidth / gameWidth);
-  sppu = Math.floor(sppu / appu) * appu;
+  sppu = Math.min(maxHeight / map.height, maxWidth / map.width);
+  sppu = Math.floor(sppu / map.appu) * map.appu;
 
   // restrict canvas size
-  canvas.width = gameWidth * sppu;
-  canvas.height = gameHeight * sppu;
+  canvas.width = map.width * sppu;
+  canvas.height = map.height * sppu;
 
   //TODO this automatically by putting both elements in a div
   panel.progressBorder.style.width = canvas.width + "px";
@@ -220,13 +218,18 @@ function sendCommands() {
   mouse = {};
 }
 
-function loadState(game) {
-  [gameWidth, gameHeight] = [game.width, game.height];
-  appu = game.appu;
-  players = game.players;
-  regions = game.regions;
-  map.src = game.mapImgDataURL;
+function loadState(state) {
+  players = state.players;
+  regions = state.regions;
   panel.playerCount.innerHTML = players.length;
+}
+
+function loadMap(newMap) {
+  map = Object.assign({}, newMap);
+
+  map.img = new Image();
+  map.img.src = map.imageURL;
+  map.img.onload = initCanvas;
 }
 
 progressBar.start = function(turnTime) {
@@ -276,6 +279,7 @@ socket.on("reload", () => window.location.reload());
 socket.on("msg", msg => console.log(msg)); 
 socket.on("sendPlayerId", id => player = id);
 socket.on("sendState", loadState);
+socket.on("sendMap", loadMap);
 socket.on("startTurn", startTurn);
 socket.on("requestCommands", sendCommands);
 

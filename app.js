@@ -205,33 +205,40 @@ function buildMapImageURL(width, height, appu, regions, edges) {
 
 function Game(mapDef, turnTime) {
   console.log("Starting new game...");
-  let rng = new Alea(mapDef.seed);
-  let {width, height, mapGen, terrainGen, appu} = mapDef;
+  let players = [];
 
-  let map = mapGen(width, height, rng);
-  let regions = map.polygons().map(poly => Region(poly, poly.data.id));
+  let map = Object.assign({}, mapDef);
+  let rng = new Alea(map.seed);
+
+  map.diagram = map.mapGen(map.width, map.height, rng);
+  let regions = map.diagram.polygons().map(poly => Region(poly, poly.data.id));
 
   // find connected cells
-  map.links().forEach(link => {
+  map.diagram.links().forEach(link => {
     regions[link.source.id].connected.push(link.target.id);
     regions[link.target.id].connected.push(link.source.id);
   });
 
   // generate region terrain
-  terrainGen(regions, rng);
+  map.terrainGen(regions, rng);
 
   // generate map image
-  let mapImgDataURL=buildMapImageURL(width, height, appu, regions, map.edges);
+  map.imageURL = buildMapImageURL(
+    map.width, map.height, map.appu, regions, map.diagram.edges);
 
-  return Object.assign({
+  let game = Object.assign({
     regions,
-    mapImgDataURL,
+    map,
     turnTime,
-    players: [],
+    players,
     waitingOn: new Set(),
     nextId: 0,
     turnCount: 0,
-  }, mapDef);
+    state: {regions, players},
+  });
+
+  console.log(game.map.appu);
+  return game;
 }
 
 function startTurn(game) {
@@ -280,8 +287,7 @@ function loadCommands(game, player, commandIds) {
  Region Utilities
  **************/
 
-function areEnemies(region1, region2) {
-  return region1.player !== region2.player
+function areEnemies(region1, region2) { return region1.player !== region2.player
       && region1.units.length
       && region2.units.length;
 }
@@ -326,7 +332,7 @@ function run(game) {
     });
 
   // send the updates to the players and start a new turn
-  io.emit("sendState", game); // FIXME to just send update
+  io.emit("sendState", game.state); // FIXME to just send update
   startTurn(game);
 }
 
@@ -414,7 +420,8 @@ function playerSession(socket) {
   io.emit("msg", "Connected to server");
 
   socket.emit("sendPlayerId", player);
-  io.emit("sendState", game);
+  io.emit("sendState", game.state);
+  io.emit("sendMap", game.map);
 
   socket.on("ready", () => readyPlayer(game, player));
   socket.on("sendCommands", cmdIds => loadCommands(game, player, cmdIds));
@@ -453,7 +460,7 @@ function removePlayer(game, player) {
   game.players = game.players.filter(p => p !== player);
   game.waitingOn.delete(player);
   deletePlayerUnits(game.regions, player);
-  io.emit("sendState", game);
+  io.emit("sendState", game.state);
 }
 
 function deletePlayerUnits(region, player) {
