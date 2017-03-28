@@ -43,21 +43,12 @@ http.listen(port, () => console.log("Server started on port", port));
  ***************/
 
 var poissonVoronoi = {
-  tileGen: poissonTiles,
+  mapGen: poissonVoronoiMap,
   terrainGen: simplexTerrain,
   width: 16,
   height: 16,
   appu: 16,
   seed: 3,
-};
-
-var smallSimplexGrid = {
-  tileGen: gridTiles,
-  terrainGen: simplexTerrain,
-  width: 6,
-  height: 6,
-  appu: 16,
-  seed: 212,
 };
 
 /**************
@@ -92,52 +83,22 @@ function simplexTerrain(tiles, rng) {
   });
 }
 
-function poissonTiles(width, height, rng) {
+function poissonVoronoiMap(width, height, rng) {
   let size = [width, height];
+
   // generate poisson disk distribution
-  let pds = new Poisson(size, 1, 1, 30, rng);
-  let points = pds.fill();
+  let points = new Poisson(size, 1, 1, 30, rng).fill();
   points.forEach((point, i) => point.id = i);
 
   // find voronoi diagram of points
-  let diagram = voronoi().size(size)(points);
-  let tiles = diagram.polygons().map(Tile);
-
-  // find connected cells
-  diagram.links().forEach(link => {
-    tiles[link.source.id].connected.push(link.target.id);
-    tiles[link.target.id].connected.push(link.source.id);
-  });
-
-  return tiles;
-}
-
-function gridTiles(width, height) {
-  console.log("Creating tiles...");
-  let tiles = [];
-
-  // create grid of tiles
-  for (let x = 0; x < width; ++x)
-    for (let y = 0; y < height; ++y)
-      tiles.push(Tile([[x,y], [x+1,y], [x+1,y+1], [x,y+1]], tiles.length));
-
-  // find connected tiles
-  tiles.forEach((tile, i) => {
-    tiles.slice(i + 1).forEach(other => {
-      if (distSq(tile.x, tile.y, other.x, other.y) <= 1) {
-        tile.connected.push(other.id);
-        other.connected.push(tile.id);
-      }
-    });
-  });
-  return tiles;
+  return voronoi().size(size)(points);
 }
 
 /*********
  Pixel Map
  *********/
 
-function buildMapImageURL(width, height, appu, tiles) {
+function buildMapImageURL(width, height, appu, tiles, edges) {
   // create canvas
   let canvas = new Canvas(width * appu, height * appu);
   let context = canvas.getContext('2d');
@@ -160,34 +121,22 @@ function buildMapImageURL(width, height, appu, tiles) {
   // construct tile borders
   let mData = context.getImageData(0, 0, canvas.width, canvas.height);
 
-  tiles
-  .filter(t => t.terrain >= 0)
-  .sort((t1, t2) => t1.y - t2.y)
-  .forEach(t => {
-    let corners = t.points.map(p => p.map(c => Math.floor(c * appu - 0.01)));
-    let edges = corners.map((val, i, arr) =>
-        [...val, ...arr[(i + 1) % arr.length]]);
+  edges
+  .filter(edge => edge.left && edge.right)
+  .forEach(edge => {
+    let t1 = tiles[edge.left.data.id];
+    let t2 = tiles[edge.right.data.id];
 
-    edges
-      .forEach(edge => bline(mData, 0.3, ...edge, ...Yellow));
+    let bPoints = [...edge[0], ...edge[1]]
+      .map(c => Math.floor(c * appu));
 
-    edges
-      .map(e => [e[0], e[1] + 1, e[2], e[3] + 1])
-      .filter(edge => edge[0] < edge[2])
-      .forEach(edge => bline(mData, 0.9, ...edge, ...Brown));
-
-    edges
-      .map(e => [e[0], e[1] + 1, e[2], e[3] + 1])
-      .filter(edge => edge[0] > edge[2])
-      .forEach(edge => bline(mData, 1, ...edge, 91, 141, 23));
-
-    edges
-      .forEach(edge => {
-        bline(mData, 1.0, ...edge, ...Brown, 255);
-        bline(mData, 0.5, ...edge, ...Orange, 255);
-        bline(mData, 0.5, ...edge, ...DarkGreen, 255);
-    });
+    // coast
+    if (Math.sign(t1.terrain) !== Math.sign(t2.terrain))
+      bline(mData, 1, ...bPoints, ...Yellow);
+    else if (t1.terrain >= 0 && t2.terrain >= 0)
+      bline(mData, 0.4, ...bPoints, ...Brown);
   });
+
   context.putImageData(mData, 0, 0);
   return canvas.toDataURL();
 }
@@ -198,16 +147,27 @@ function buildMapImageURL(width, height, appu, tiles) {
 
 function Game(mapDef, turnTime) {
   console.log("Starting new game...");
-
   let rng = new Alea(mapDef.seed);
-  let tiles = mapDef.tileGen(mapDef.width, mapDef.height, rng);
-  mapDef.terrainGen(tiles, rng);
-  let mapDataURL = buildMapImageURL(
-    mapDef.width, mapDef.height, mapDef.appu, tiles);
+  let {width, height, mapGen, terrainGen, appu} = mapDef;
+
+  let map = mapGen(width, height, rng);
+  let tiles = map.polygons().map(poly => Tile(poly, poly.data.id));
+
+  // find connected cells
+  map.links().forEach(link => {
+    tiles[link.source.id].connected.push(link.target.id);
+    tiles[link.target.id].connected.push(link.source.id);
+  });
+
+  // generate tile terrain
+  terrainGen(tiles, rng);
+
+  // generate map image
+  let mapImgDataURL = buildMapImageURL(width, height, appu, tiles, map.edges);
 
   return Object.assign({
     tiles,
-    mapDataURL,
+    mapImgDataURL,
     turnTime,
     players: [],
     waitingOn: new Set(),

@@ -225,7 +225,7 @@ function loadState(game) {
   appu = game.appu;
   players = game.players;
   tiles = game.tiles;
-  map.src = game.mapDataURL;
+  map.src = game.mapImgDataURL;
   panel.playerCount.innerHTML = players.length;
 }
 
