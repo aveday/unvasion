@@ -18,6 +18,11 @@ const REGION_MAX = 36;
 const UNIT_COEFFICIENT = 2;
 const SPAWN_REQ = REGION_MAX / UNIT_COEFFICIENT;
 
+const NORTHCOAST = [1, 81];
+const SOUTHCOAST = [33, 113];
+const WESTCOAST = [16, 96];
+const EASTCOAST = [18, 98];
+
 var autoreload = true;
 var port  = 4000;
 var games = [];
@@ -47,10 +52,6 @@ tilesetImage.decode(data => {
     }
     tileset[ti].data.push(...row);
   }
-  tileset.northCoast = tileset[1];
-  tileset.southCoast = tileset[33];
-  tileset.westCoast = tileset[16];
-  tileset.eastCoast= tileset[18]
 });
 
 
@@ -123,7 +124,8 @@ function poissonVoronoiMap(width, height, rng) {
  Pixel Map
  *********/
 
-function buildMapImageURL(width, height, appu, regions, edges) {
+function buildMapImageURL(map, regions, edges, frame) {
+  let {width, height, appu} = map;
 
   // create land
   let land = new Canvas(width * appu, height * appu).getContext('2d');
@@ -160,7 +162,9 @@ function buildMapImageURL(width, height, appu, regions, edges) {
 
     // East-West coastline
     if (coast && slope < 1) {
-      let tile = NS[0].terrain < 0 ? tileset.northCoast : tileset.southCoast;
+      let tileIds = NS[0].terrain < 0 ? NORTHCOAST : SOUTHCOAST;
+      let tile = tileset[tileIds[(frame+edge.left.index) % tileIds.length]];
+
       blinePoints(...mEdge).forEach(point => {
         for (let y = 0; y < tile.height; ++y) {
           let dest = [point[0], point[1] + y - tileSize / 2];
@@ -174,7 +178,8 @@ function buildMapImageURL(width, height, appu, regions, edges) {
 
     // North-South coastlines
     if (coast && slope >= 1) {
-      let tile = EW[0].terrain < 0 ? tileset.westCoast : tileset.eastCoast;
+      let tileIds = EW[0].terrain < 0 ? WESTCOAST : EASTCOAST;
+      let tile = tileset[tileIds[(frame+edge.left.index) % tileIds.length]];
       blinePoints(...mEdge).forEach(point => {
         for (let x = 0; x < tile.width; ++x) {
           let dest = [point[0] + x - tileSize / 2, point[1]];
@@ -189,14 +194,14 @@ function buildMapImageURL(width, height, appu, regions, edges) {
   land.putImageData(landData, 0, 0);
 
   // create and composite map
-  let map = new Canvas(width * appu, height * appu).getContext('2d');
+  let context = new Canvas(width * appu, height * appu).getContext('2d');
   let water = new Canvas.Image;
   water.src = sprites.water;
-  map.fillStyle = map.createPattern(water, 'repeat');
-  map.fillRect(0, 0, map.canvas.width, map.canvas.height);
-  map.drawImage(land.canvas, 0, 0);
+  context.fillStyle = context.createPattern(water, 'repeat');
+  context.fillRect(0, 0, width * appu, height * appu);
+  context.drawImage(land.canvas, 0, 0);
 
-  return map.canvas.toDataURL();
+  return context.canvas.toDataURL();
 }
 
 /************
@@ -223,8 +228,7 @@ function Game(mapDef, turnTime) {
   map.terrainGen(regions, rng);
 
   // generate map image
-  map.imageURL = buildMapImageURL(
-    map.width, map.height, map.appu, regions, diagram.edges);
+  map.imageURL = buildMapImageURL(map, regions, diagram.edges, 0);
 
   let game = Object.assign({
     regions,
