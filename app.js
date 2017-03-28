@@ -47,6 +47,10 @@ tilesetImage.decode(data => {
     }
     tileset[ti].data.push(...row);
   }
+  tileset.northCoast = tileset[1];
+  tileset.southCoast = tileset[33];
+  tileset.westCoast = tileset[16];
+  tileset.eastCoast= tileset[18]
 });
 
 
@@ -149,34 +153,48 @@ function buildMapImageURL(width, height, appu, regions, edges) {
     let t1 = regions[edge.left.data.id];
     let t2 = regions[edge.right.data.id];
 
-    let bPoints = [...edge[0], ...edge[1]]
+    let mEdge = [...edge[0], ...edge[1]]
       .map(c => Math.floor(c * appu));
+    let mQuad = [[t1.x, t1.y], edge[0], [t2.x, t2.y], edge[1]]
+      .map(p => p.map(c => Math.floor(c * appu)));
 
     if (t1.terrain >= 0 && t2.terrain >= 0)
-      bline(mData, 0.4, ...bPoints, ...Brown);
+      bline(mData, 0.4, ...mEdge, ...Brown);
     
-    let dir = 
-      (Math.abs(edge[0][0] - edge[1][0]) > Math.abs(edge[0][1] - edge[1][1]))
-        ? "H"
-        : "V";
-
+    let slope = Math.abs((edge[0][1]-edge[1][1]) / (edge[0][0]-edge[1][0]));
     let coast = Math.sign(t1.terrain) !== Math.sign(t2.terrain);
 
     let NS = [t1, t2].sort((t1, t2) => t1.y > t2.y);
     let EW = [t1, t2].sort((t1, t2) => t1.x > t2.x);
 
-    let southcoast = tileset[33];
-
-    if (coast && dir === "H" && NS[1].terrain < 0) {
-      blinePoints(...bPoints).forEach(point => {
-        for (let y = 4; y < 12; ++y) {
-          let offset = y - tileSize / 2;
-          let sample = getPixel(southcoast, point[0] % southcoast.width, y);
-          drawPixel(mData, point[0], point[1] + offset, ...sample);
+    // East-West coastline
+    if (coast && slope < 1) {
+      let tile = NS[0].terrain < 0 ? tileset.northCoast : tileset.southCoast;
+      blinePoints(...mEdge).forEach(point => {
+        for (let y = 0; y < tile.height; ++y) {
+          let dest = [point[0], point[1] + y - tileSize / 2];
+          if (pointInQuad(dest, mQuad)) {
+            let sample = getPixel(tile, point[0] % tile.width, y);
+            drawPixel(mData, ...dest, ...sample);
+          }
         }
-      })
-      //bline(mData, 1, ...bPoints, ...Yellow);
+      });
     }
+
+    // North-South coastlines
+    if (coast && slope >= 1) {
+      let tile = EW[0].terrain < 0 ? tileset.westCoast : tileset.eastCoast;
+      blinePoints(...mEdge).forEach(point => {
+        for (let x = 0; x < tile.width; ++x) {
+          let dest = [point[0] + x - tileSize / 2, point[1]];
+          if (pointInQuad(dest, mQuad)) {
+            let sample = getPixel(tile, x, point[1] % tile.height);
+            drawPixel(mData, ...dest, ...sample);
+          }
+        }
+      });
+    }
+
   });
 
   context.putImageData(mData, 0, 0);
@@ -531,6 +549,29 @@ function getPixel(imageData, x, y) {
   let n = (y * imageData.width + x) * 4;
   return imageData.data.slice(n, n+4);
 }
+
+function pointInTri(px, py, p0x, p0y, p1x, p1y, p2x, p2y) {
+  var A = -p1y * p2x + p0y * (-p1x + p2x) + p0x * (p1y - p2y) + p1x * p2y;
+  var sign = A < 0 ? -1 : 1;
+  var s = (p0y * p2x - p0x * p2y + (p2y - p0y) * px + (p0x - p2x) * py) * sign;
+  var t = (p0x * p1y - p0y * p1x + (p0y - p1y) * px + (p1x - p0x) * py) * sign;
+  return s > 0 && t > 0 && (s + t) < A * sign;
+}
+
+function pointInQuad(point, quad) {
+  let ev = [], pv = [], cross = [];
+  for (let i = 0; i < 4; ++i) {
+    ev[i] = [quad[(i+1)%4][0] - quad[i][0], quad[(i+1)%4][1] - quad[i][1]];
+    pv[i] = [point[0] - quad[i][0], point[1] - quad[i][1]];
+    cross[i] = ev[i][0] * pv[i][1] - ev[i][1] * pv[i][0];
+  }
+  return cross.every(c => c >= 0)
+      || cross.every(c => c < 0);
+}
+
+//EV[i] = V[i+1] - V[i], where V[] - vertices in order
+//PV[i] = P - V[i]
+//Cross[i] = CrossProduct(EV[i], PV[i]) = EV[i].X * PV[i].Y - EV[i].Y * PV[i].X
 
 // Dawnbringer 16 colour palette
 let Black = [20,12,28];
