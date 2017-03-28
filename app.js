@@ -210,11 +210,11 @@ function Game(mapDef, turnTime) {
   let map = Object.assign({}, mapDef);
   let rng = new Alea(map.seed);
 
-  map.diagram = map.mapGen(map.width, map.height, rng);
-  let regions = map.diagram.polygons().map(poly => Region(poly, poly.data.id));
+  let diagram = map.mapGen(map.width, map.height, rng);
+  let regions = diagram.polygons().map(poly => Region(poly, poly.data.id));
 
   // find connected cells
-  map.diagram.links().forEach(link => {
+  diagram.links().forEach(link => {
     regions[link.source.id].connected.push(link.target.id);
     regions[link.target.id].connected.push(link.source.id);
   });
@@ -224,7 +224,7 @@ function Game(mapDef, turnTime) {
 
   // generate map image
   map.imageURL = buildMapImageURL(
-    map.width, map.height, map.appu, regions, map.diagram.edges);
+    map.width, map.height, map.appu, regions, diagram.edges);
 
   let game = Object.assign({
     regions,
