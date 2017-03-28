@@ -150,7 +150,7 @@ function buildMapImageURL(width, height, appu, regions, edges) {
       .map(p => p.map(c => Math.floor(c * appu)));
 
     if (t1.terrain >= 0 && t2.terrain >= 0)
-      bline(landData, 0.4, ...mEdge, ...Brown);
+      bline(landData, 1, ...mEdge, 90, 128, 44, 225);
     
     let slope = Math.abs((edge[0][1]-edge[1][1]) / (edge[0][0]-edge[1][0]));
     let coast = Math.sign(t1.terrain) !== Math.sign(t2.terrain);
@@ -237,7 +237,6 @@ function Game(mapDef, turnTime) {
     state: {regions, players},
   });
 
-  console.log(game.map.appu);
   return game;
 }
 
@@ -573,26 +572,4 @@ function pointInQuad(point, quad) {
   return cross.every(c => c >= 0)
       || cross.every(c => c < 0);
 }
-
-//EV[i] = V[i+1] - V[i], where V[] - vertices in order
-//PV[i] = P - V[i]
-//Cross[i] = CrossProduct(EV[i], PV[i]) = EV[i].X * PV[i].Y - EV[i].Y * PV[i].X
-
-// Dawnbringer 16 colour palette
-let Black = [20,12,28];
-let DarkRed = [68,36,52];
-let DarkBlue = [48,52,10];
-let DarkGray = [78,74,78];
-let Brown = [133,76,4];
-let DarkGreen  = [52,101,3];
-let Red = [208,70,7];
-let LightGray = [117,113,97];
-let LightBlue = [89,125,206];
-let Orange = [210,125,44];
-let BlueGray = [133,149,16];
-let LightGreen = [109,170,44];
-let Peach = [210,170,15];
-let Cyan = [109,194,20];
-let Yellow  = [218,212,94];
-let White = [222,238,21];
 
