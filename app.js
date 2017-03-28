@@ -12,6 +12,7 @@ var SimplexNoise = require("simplex-noise");
 var Poisson = require("poisson-disk-sampling");
 var voronoi = require("d3-voronoi").voronoi;
 var Canvas = require('canvas');
+var PNG = require('png-js');
 
 const TILE_MAX = 36;
 const UNIT_COEFFICIENT = 2;
@@ -27,7 +28,27 @@ var gameTimeouts = new Map();
 const sprites = {
   water: fs.readFileSync('./public/water2.png'),
   grass: fs.readFileSync('./public/grass2.png'),
+  tileset: fs.readFileSync('./public/tileset.png'),
 };
+
+let tileSize = 16;
+let tilesetImage = new PNG(sprites.tileset);
+let tileset = [];
+
+tilesetImage.decode(data => {
+  for (let i = 0; i < data.length; i += tileSize * 4) {
+    let row = data.slice(i, i + tileSize * 4);
+    let tx = Math.floor(i/4 % tilesetImage.width / tileSize);
+    let ty = Math.floor(i/4 / tilesetImage.width / tileSize);
+    let ti = tx + ty * tilesetImage.width / tileSize;
+    if (ti === tileset.length) {
+      let tile = {width: tileSize, height: tileSize, data: []};
+      tileset.push(tile);
+    }
+    tileset[ti].data.push(...row);
+  }
+});
+
 
 /***********
  Server Init
@@ -99,6 +120,7 @@ function poissonVoronoiMap(width, height, rng) {
  *********/
 
 function buildMapImageURL(width, height, appu, tiles, edges) {
+
   // create canvas
   let canvas = new Canvas(width * appu, height * appu);
   let context = canvas.getContext('2d');
@@ -130,11 +152,31 @@ function buildMapImageURL(width, height, appu, tiles, edges) {
     let bPoints = [...edge[0], ...edge[1]]
       .map(c => Math.floor(c * appu));
 
-    // coast
-    if (Math.sign(t1.terrain) !== Math.sign(t2.terrain))
-      bline(mData, 1, ...bPoints, ...Yellow);
-    else if (t1.terrain >= 0 && t2.terrain >= 0)
+    if (t1.terrain >= 0 && t2.terrain >= 0)
       bline(mData, 0.4, ...bPoints, ...Brown);
+    
+    let dir = 
+      (Math.abs(edge[0][0] - edge[1][0]) > Math.abs(edge[0][1] - edge[1][1]))
+        ? "H"
+        : "V";
+
+    let coast = Math.sign(t1.terrain) !== Math.sign(t2.terrain);
+
+    let NS = [t1, t2].sort((t1, t2) => t1.y > t2.y);
+    let EW = [t1, t2].sort((t1, t2) => t1.x > t2.x);
+
+    let southcoast = tileset[33];
+
+    if (coast && dir === "H" && NS[1].terrain < 0) {
+      blinePoints(...bPoints).forEach(point => {
+        for (let y = 4; y < 12; ++y) {
+          let offset = y - tileSize / 2;
+          let sample = getPixel(southcoast, point[0] % southcoast.width, y);
+          drawPixel(mData, point[0], point[1] + offset, ...sample);
+        }
+      })
+      //bline(mData, 1, ...bPoints, ...Yellow);
+    }
   });
 
   context.putImageData(mData, 0, 0);
@@ -436,6 +478,20 @@ function fillShape(context, x,y,points,s,t){
   context.fill();
 };
 
+function drawPixel(imageData, x, y, r, g, b, a) {
+  if (a === 0) return;
+  if (a === undefined || a === 255) return putPixel(...arguments);
+
+  let n = (y * imageData.width + x) * 4;
+  let [r0, g0, b0, a0] = imageData.data.slice(n, n+4);
+
+  //TODO use uint8array and uint8array.set
+  imageData.data[n] =   (r*a + r0*a0 + r0*a*a0/0xff) / 0xff;
+  imageData.data[n+1] = (g*a + g0*a0 + g0*a*a0/0xff) / 0xff;
+  imageData.data[n+2] = (b*a + b0*a0 + b0*a*a0/0xff) / 0xff;
+  imageData.data[n+3] = a0 + a - a0*a/0xff;
+}
+
 function putPixel(imageData, x, y, r, g, b, a) {
   if (a === undefined) a = 255;
   let n = (y * imageData.width + x) * 4;
@@ -469,6 +525,11 @@ function bline(imageData, prob, x0, y0, x1, y1, ...color) {
   blinePoints(x0, y0, x1, y1)
     .filter(() => Math.random() < prob)
     .forEach(point => putPixel(imageData, ...point, ...color));
+}
+
+function getPixel(imageData, x, y) {
+  let n = (y * imageData.width + x) * 4;
+  return imageData.data.slice(n, n+4);
 }
 
 // Dawnbringer 16 colour palette
