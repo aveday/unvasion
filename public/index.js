@@ -32,10 +32,10 @@ let mouse = {};
 
 let appu, sppu;
 
-let tiles, players, gameWidth, gameHeight;
+let regions, players, gameWidth, gameHeight;
 
-function corner(tile) {
-  return [(tile.x - 0.5) * sppu, (tile.y - 0.5) * sppu];
+function corner(region) {
+  return [(region.x - 0.5) * sppu, (region.y - 0.5) * sppu];
 }
 
 function playerColor(player) {
@@ -43,22 +43,22 @@ function playerColor(player) {
   return playerColors[index % playerColors.length];
 }
 
-function drawTile(tile) {
-  context.fillShape(0, 0, tile.points, sppu, 0);
+function drawRegion(region) {
+  context.fillShape(0, 0, region.points, sppu, 0);
   context.stroke();
 }
 
-function drawBuilding(tile) {
+function drawBuilding(region) {
   let gap = GAP_SIZE * sppu;
   let size = sppu - gap * 2;
   let part = size / BUILDING_PARTS;
-  let [x, y] = corner(tile).map(c => c + gap);
+  let [x, y] = corner(region).map(c => c + gap);
 
-  if (tile.building === 1) {
+  if (region.building === 1) {
     context.fillRect(x, y, size, size);
     context.strokeRect(x, y, size, size);
   } else for (let i = 0; i < BUILDING_PARTS; ++i) {
-    context.fillRect(x, y + i * part, size, part * tile.building);
+    context.fillRect(x, y + i * part, size, part * region.building);
   }
 }
 
@@ -73,17 +73,17 @@ function drawPlans(targets, origin) {
   });
 }
 
-function drawUnits(tile) {
-  if (tile.units.length === 0) return;
-  let [x, y] = corner(tile);
+function drawUnits(region) {
+  if (region.units.length === 0) return;
+  let [x, y] = corner(region);
 
-  context.fillStyle = playerColor(tile.player);
+  context.fillStyle = playerColor(region.player);
 
-  let e = Math.ceil(Math.sqrt(tile.units.length));
-  let m = Math.floor((e*e - tile.units.length) / 2);
+  let e = Math.ceil(Math.sqrt(region.units.length));
+  let m = Math.floor((e*e - region.units.length) / 2);
 
   context.beginPath();
-  for (let n = m; n < tile.units.length + m; ++n) {
+  for (let n = m; n < region.units.length + m; ++n) {
     let ux = x + (Math.floor(n / e) + 0.5)/e *  sppu;
     let uy = y + (n % e + 0.5)/e *  sppu;
     context.moveTo(ux, uy);
@@ -112,10 +112,10 @@ function draw() {
     context.drawImage(map, 0, 0, gameWidth * sppu, gameHeight * sppu)
 
     let soldier = document.getElementById("soldier");
-    tiles.filter(tile => tile.units.length).forEach(tile => {
+    regions.filter(region => region.units.length).forEach(region => {
       context.drawImage(soldier,
-        tile.x * sppu,
-        tile.y * sppu,
+        region.x * sppu,
+        region.y * sppu,
         soldier.width * sppu / appu,
         soldier.height * sppu / appu);
     });
@@ -124,21 +124,21 @@ function draw() {
     // water
     fillCanvas(canvas, "#3557a0");
 
-    // tiles
+    // regions
     context.globalAlpha = 1;
     context.lineWidth = 2;
     context.fillStyle = "#4f9627";
     context.strokeStyle = "#3f751f";
-    tiles.filter(t => t.terrain >= 0).forEach(drawTile);
+    regions.filter(t => t.terrain >= 0).forEach(drawRegion);
 
     // buildings
     context.strokeStyle = "#5b2000";
     context.fillStyle = "#9b500d";
-    tiles.filter(tile => tile.building).forEach(drawBuilding);
+    regions.filter(region => region.building).forEach(drawBuilding);
 
     // units
     context.lineWidth = 0;
-    tiles.filter(tile => tile.units.length).forEach(drawUnits);
+    regions.filter(region => region.units.length).forEach(drawUnits);
   }
 
   // building commands
@@ -157,8 +157,8 @@ function draw() {
 }
 
 function initCanvas() {
-  if (!tiles) return;
-  // find largest possible tilesize while still fitting entire map
+  if (!regions) return;
+  // find largest possible regionsize while still fitting entire map
   let maxHeight = window.innerHeight * 0.95 - panel.header.offsetHeight;
   let maxWidth = window.innerWidth * 0.95;
 
@@ -176,7 +176,7 @@ function initCanvas() {
 }
 
 function addCommand(origin, target) {
-  // check the command is between connected tiles
+  // check the command is between connected regions
   if ( ![origin.id, ...origin.connected].includes(target.id)
     || ![player, undefined].includes(origin.player)
     || target.terrain < 0 )
@@ -192,8 +192,8 @@ function addCommand(origin, target) {
   }
   // building commands
   else if (origin.player === undefined) {
-    // only allow plans adjacent to friendly tiles
-    if (origin.connected.some(id => tiles[id].player === player))
+    // only allow plans adjacent to friendly regions
+    if (origin.connected.some(id => regions[id].player === player))
       targets.push(target);
   }
   // movement commands
@@ -208,7 +208,7 @@ function addCommand(origin, target) {
 }
 
 function sendCommands() {
-  // convert commands to tileIds and send to the server
+  // convert commands to regionIds and send to the server
   // TODO split up and send commands individually
   let commandIds = Array.from(commands, command => {
     let [origin, targets] = command;
@@ -224,7 +224,7 @@ function loadState(game) {
   [gameWidth, gameHeight] = [game.width, game.height];
   appu = game.appu;
   players = game.players;
-  tiles = game.tiles;
+  regions = game.regions;
   map.src = game.mapImgDataURL;
   panel.playerCount.innerHTML = players.length;
 }
@@ -239,34 +239,34 @@ progressBar.start = function(turnTime) {
 
 function startTurn(turnTime) {
   // place construction commands on adjacent unfinished buildings
-  tiles.filter(t => t.building && t.building < 1 && !t.units.length)
-      .filter(t => t.connected.some(id => tiles[id].player === player))
+  regions.filter(t => t.building && t.building < 1 && !t.units.length)
+      .filter(t => t.connected.some(id => regions[id].player === player))
       .forEach(t => addCommand(t, t));
 
   progressBar.start(turnTime);
 }
 
-function pointInTile(tile, x, y) {
+function pointInRegion(region, x, y) {
   context.beginPath()
-  tile.points.forEach(point => context.lineTo(...point));
+  region.points.forEach(point => context.lineTo(...point));
   context.closePath();
   return context.isPointInPath(x / sppu, y / sppu);
 }
 
-function getClickedTile(e) {
+function getClickedRegion(e) {
   let [canvasX, canvasY] = elementCoords(canvas, e.pageX, e.pageY);
   let [x, y] = [canvasX / sppu, canvasY / sppu];
-  let closest = closestPoint(x, y, tiles);
-  //let tile = pointInTile(closest, x, y) ? closest : undefined; FIXME
+  let closest = closestPoint(x, y, regions);
+  //let region = pointInRegion(closest, x, y) ? closest : undefined; FIXME
   return closest;
 }
 
 canvas.addEventListener("mousedown", e => {
-  mouse.down = getClickedTile(e);
+  mouse.down = getClickedRegion(e);
 });
 
 canvas.addEventListener("mouseup", e => {
-  mouse.up = getClickedTile(e);
+  mouse.up = getClickedRegion(e);
   if (mouse.up && mouse.down)
     addCommand(mouse.down, mouse.up);
   mouse = {};

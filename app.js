@@ -14,9 +14,9 @@ var voronoi = require("d3-voronoi").voronoi;
 var Canvas = require('canvas');
 var PNG = require('png-js');
 
-const TILE_MAX = 36;
+const REGION_MAX = 36;
 const UNIT_COEFFICIENT = 2;
-const SPAWN_REQ = TILE_MAX / UNIT_COEFFICIENT;
+const SPAWN_REQ = REGION_MAX / UNIT_COEFFICIENT;
 
 var autoreload = true;
 var port  = 4000;
@@ -76,7 +76,7 @@ var poissonVoronoi = {
  Map Generation
  **************/
 
-function Tile(points, id) {
+function Region(points, id) {
   let x = average(...points.map(p => p[0]));
   let y = average(...points.map(p => p[1]));
   return {
@@ -89,7 +89,7 @@ function Tile(points, id) {
   };
 }
 
-function simplexTerrain(tiles, rng) {
+function simplexTerrain(regions, rng) {
   let offset = 0.1;
   let octaves = [
     {scale: 0.20, amp: 0.8},
@@ -97,7 +97,7 @@ function simplexTerrain(tiles, rng) {
   ];
 
   let simplex = new SimplexNoise(rng);
-  tiles.forEach(t => {
+  regions.forEach(t => {
     t.terrain = offset;
     for (let n of octaves)
       t.terrain += n.amp * simplex.noise2D(t.x * n.scale, t.y * n.scale);
@@ -119,7 +119,7 @@ function poissonVoronoiMap(width, height, rng) {
  Pixel Map
  *********/
 
-function buildMapImageURL(width, height, appu, tiles, edges) {
+function buildMapImageURL(width, height, appu, regions, edges) {
 
   // create canvas
   let canvas = new Canvas(width * appu, height * appu);
@@ -135,19 +135,19 @@ function buildMapImageURL(width, height, appu, tiles, edges) {
   let grass = new Canvas.Image;
   grass.src = sprites.grass;
   context.fillStyle = context.createPattern(grass, 'repeat');
-  tiles.filter(t => t.terrain >= 0).forEach(t => {
+  regions.filter(t => t.terrain >= 0).forEach(t => {
     let points = t.points.map(p => p.map(c => Math.floor(c*appu - 0.01)));
     fillShape(context, 0, 0, points, 1, 0);
   });
 
-  // construct tile borders
+  // construct region borders
   let mData = context.getImageData(0, 0, canvas.width, canvas.height);
 
   edges
   .filter(edge => edge.left && edge.right)
   .forEach(edge => {
-    let t1 = tiles[edge.left.data.id];
-    let t2 = tiles[edge.right.data.id];
+    let t1 = regions[edge.left.data.id];
+    let t2 = regions[edge.right.data.id];
 
     let bPoints = [...edge[0], ...edge[1]]
       .map(c => Math.floor(c * appu));
@@ -193,22 +193,22 @@ function Game(mapDef, turnTime) {
   let {width, height, mapGen, terrainGen, appu} = mapDef;
 
   let map = mapGen(width, height, rng);
-  let tiles = map.polygons().map(poly => Tile(poly, poly.data.id));
+  let regions = map.polygons().map(poly => Region(poly, poly.data.id));
 
   // find connected cells
   map.links().forEach(link => {
-    tiles[link.source.id].connected.push(link.target.id);
-    tiles[link.target.id].connected.push(link.source.id);
+    regions[link.source.id].connected.push(link.target.id);
+    regions[link.target.id].connected.push(link.source.id);
   });
 
-  // generate tile terrain
-  terrainGen(tiles, rng);
+  // generate region terrain
+  terrainGen(regions, rng);
 
   // generate map image
-  let mapImgDataURL = buildMapImageURL(width, height, appu, tiles, map.edges);
+  let mapImgDataURL=buildMapImageURL(width, height, appu, regions, map.edges);
 
   return Object.assign({
-    tiles,
+    regions,
     mapImgDataURL,
     turnTime,
     players: [],
@@ -221,7 +221,7 @@ function Game(mapDef, turnTime) {
 function startTurn(game) {
   console.log(chalk.green("\nStarting turn", game.turnCount));
   io.emit("startTurn", game.turnTime);
-  game.tiles.forEach(tile => setGroups(tile, [tile], [false]));
+  game.regions.forEach(region => setGroups(region, [region], [false]));
   game.waitingOn = new Set(game.players);
   gameTimeouts.set(game, setTimeout(endTurn, game.turnTime, game));
 }
@@ -245,13 +245,13 @@ function loadCommands(game, player, commandIds) {
 
   // determine which commands are for construction
   let planIds = commandIds
-    .filter(command => game.tiles[command[0]].player === undefined)
+    .filter(command => game.regions[command[0]].player === undefined)
     .map(commandId => commandId[0]);
 
   commandIds.forEach(command => {
     let [originId, targetIds] = command;
-    let origin = game.tiles[originId];
-    let targets = targetIds.map(id => game.tiles[id]);
+    let origin = game.regions[originId];
+    let targets = targetIds.map(id => game.regions[id]);
     let builds = targetIds.map(id => planIds.includes(id));
     setGroups(origin, targets, builds);
   });
@@ -261,22 +261,22 @@ function loadCommands(game, player, commandIds) {
 }
 
 /**************
- Tile Utilities
+ Region Utilities
  **************/
 
-function areEnemies(tile1, tile2) {
-  return tile1.player !== tile2.player
-      && tile1.units.length
-      && tile2.units.length;
+function areEnemies(region1, region2) {
+  return region1.player !== region2.player
+      && region1.units.length
+      && region2.units.length;
 }
 
-function findEmptyTiles(tiles) {
-  return tiles.filter(t => t.terrain >= 0 && t.units.length === 0);
+function findEmptyRegions(regions) {
+  return regions.filter(t => t.terrain >= 0 && t.units.length === 0);
 }
 
-function setUnits(game, tile, player, n) {
-  tile.player = player;
-  tile.units = Array.from({length: n}, () => game.nextId++);
+function setUnits(game, region, player, n) {
+  region.player = player;
+  region.units = Array.from({length: n}, () => game.nextId++);
 }
 
 /**********
@@ -286,7 +286,7 @@ function setUnits(game, tile, player, n) {
 function run(game) {
   clearTimeout(gameTimeouts.get(game));
   console.log(chalk.cyan("Running turn %s"), game.turnCount++);
-  let occupied = game.tiles.filter(tile => tile.units.length > 0);
+  let occupied = game.regions.filter(region => region.units.length > 0);
 
   // execute interactions
   occupied.forEach(runInteractions);
@@ -294,19 +294,19 @@ function run(game) {
 
   // execute movement
   occupied.forEach(sendUnits);
-  game.tiles.forEach(receiveUnits);
+  game.regions.forEach(receiveUnits);
 
   // create new units in occupied houses
-  game.tiles.filter(t => t.building === 1 && t.units.length >= SPAWN_REQ)
-    .forEach(tile => {
-      tile.units.push(game.nextId++);
+  game.regions.filter(t => t.building === 1 && t.units.length >= SPAWN_REQ)
+    .forEach(region => {
+      region.units.push(game.nextId++);
     });
 
-  // kill units in overpopulated tiles
-  game.tiles.filter(t => t.units.length > TILE_MAX)
-    .forEach(tile => {
-      let damage = (tile.units.length - TILE_MAX) / UNIT_COEFFICIENT;
-      tile.units.splice(0, Math.ceil(damage));
+  // kill units in overpopulated regions
+  game.regions.filter(t => t.units.length > REGION_MAX)
+    .forEach(region => {
+      let damage = (region.units.length - REGION_MAX) / UNIT_COEFFICIENT;
+      region.units.splice(0, Math.ceil(damage));
     });
 
   // send the updates to the players and start a new turn
@@ -314,65 +314,65 @@ function run(game) {
   startTurn(game);
 }
 
-function setGroups(tile, targets, builds) {
-  targets = targets || [tile];
-  tile.groups = evenChunks(tile.units, targets.length);
-  tile.groups.forEach((group, i) => {
-    group.player = tile.player;
+function setGroups(region, targets, builds) {
+  targets = targets || [region];
+  region.groups = evenChunks(region.units, targets.length);
+  region.groups.forEach((group, i) => {
+    group.player = region.player;
     group.target = targets[i];
     group.build = builds[i];
   });
 }
 
-function runInteractions(tile) {
-  tile.groups.forEach(group => {
+function runInteractions(region) {
+  region.groups.forEach(group => {
     let move = false;
 
-    //attack enemy tiles
-    if (areEnemies(tile, group.target)) {
+    //attack enemy regions
+    if (areEnemies(region, group.target)) {
       group.target.attackedBy = group.target.attackedBy.concat(group);
 
     // construct buildings
     } else if (group.build) {
-      group.target.building += group.length / TILE_MAX;
+      group.target.building += group.length / REGION_MAX;
       group.target.building = Math.min(group.target.building, 1);
 
     } else {
       move = true;
 
     } if (!move) {
-      group.target = tile;
+      group.target = region;
     }
   });
 }
 
-function calculateFatalities(tile) {
-  let damage = tile.attackedBy.length / UNIT_COEFFICIENT;
-  let deaths = evenChunks(Array(Math.ceil(damage)), tile.groups.length);
-  tile.groups.forEach((group, i) => group.splice(0, deaths[i].length));
-  if (tile.groups.every(group => group.length === 0))
-    tile.player = undefined;
-  tile.attackedBy = [];
+function calculateFatalities(region) {
+  let damage = region.attackedBy.length / UNIT_COEFFICIENT;
+  let deaths = evenChunks(Array(Math.ceil(damage)), region.groups.length);
+  region.groups.forEach((group, i) => group.splice(0, deaths[i].length));
+  if (region.groups.every(group => group.length === 0))
+    region.player = undefined;
+  region.attackedBy = [];
 }
 
-function sendUnits(tile) {
-  tile.groups.forEach(group => group.target.inbound.push(group));
-  tile.groups = [];
+function sendUnits(region) {
+  region.groups.forEach(group => group.target.inbound.push(group));
+  region.groups = [];
 }
 
-function receiveUnits(tile) {
+function receiveUnits(region) {
   // join inbound groups of the same player
   let groups = [];
-  tile.inbound.forEach(group => {
+  region.inbound.forEach(group => {
     let allies = groups.find(g => g.player === group.player);
     allies && allies.push(...group) || groups.push(group);
   });
-  tile.inbound = [];
+  region.inbound = [];
   // largest group wins, with losses equal to the size of second largest
   let victor = groups.reduce((v, g) => g.length > v.length ? g : v, []);
   let deaths = groups.map(g => g.length).sort((a, b) => b - a)[1] || 0;
-  tile.units = Array.from(victor.slice(deaths));
-  tile.player = tile.units.length ? victor.player : undefined;
+  region.units = Array.from(victor.slice(deaths));
+  region.player = region.units.length ? victor.player : undefined;
 }
 
 /*****************
@@ -418,10 +418,10 @@ function addPlayer(game, player) {
   game.waitingOn.add(player);
   console.log(chalk.yellow("Player %s joined game"), player);
 
-  // start on random empty tile with 24 units (dev)
-  let empty = findEmptyTiles(game.tiles);
-  let startingTile = empty[Math.floor(Math.random() * empty.length)];
-  setUnits(game, startingTile, player, 24);
+  // start on random empty region with 24 units (dev)
+  let empty = findEmptyRegions(game.regions);
+  let startingRegion = empty[Math.floor(Math.random() * empty.length)];
+  setUnits(game, startingRegion, player, 24);
   return player;
 }
 
@@ -436,7 +436,7 @@ function removePlayer(game, player) {
   console.log(chalk.red("Player %s disconnected"), player);
   game.players = game.players.filter(p => p !== player);
   game.waitingOn.delete(player);
-  deletePlayerUnits(game.tiles, player);
+  deletePlayerUnits(game.regions, player);
   io.emit("sendState", game);
 }
 
