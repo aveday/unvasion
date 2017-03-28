@@ -140,7 +140,7 @@ function buildMapImageURL(width, height, appu, regions, edges) {
   grass.src = sprites.grass;
   context.fillStyle = context.createPattern(grass, 'repeat');
   regions.filter(t => t.terrain >= 0).forEach(t => {
-    let points = t.points.map(p => p.map(c => Math.floor(c*appu - 0.01)));
+    let points = t.points.map(p => p.map(c => Math.floor(c*appu)));
     fillShape(context, 0, 0, points, 1, 0);
   });
 
