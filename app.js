@@ -73,7 +73,7 @@ var poissonVoronoi = {
   width: 16,
   height: 16,
   appu: 16,
-  seed: 3,
+  seed: 3213,
 };
 
 /**************
@@ -125,27 +125,18 @@ function poissonVoronoiMap(width, height, rng) {
 
 function buildMapImageURL(width, height, appu, regions, edges) {
 
-  // create canvas
-  let canvas = new Canvas(width * appu, height * appu);
-  let context = canvas.getContext('2d');
-
-  // water
-  let water = new Canvas.Image;
-  water.src = sprites.water;
-  context.fillStyle = context.createPattern(water, 'repeat');
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  // fill grass
+  // create land
+  let land = new Canvas(width * appu, height * appu).getContext('2d');
   let grass = new Canvas.Image;
   grass.src = sprites.grass;
-  context.fillStyle = context.createPattern(grass, 'repeat');
+  land.fillStyle = land.createPattern(grass, 'repeat');
   regions.filter(t => t.terrain >= 0).forEach(t => {
-    let points = t.points.map(p => p.map(c => Math.floor(c*appu)));
-    fillShape(context, 0, 0, points, 1, 0);
+    let points = t.points.map(p => p.map(c => c*appu));
+    fillShape(land, 0, 0, points, 1, 0);
   });
 
   // construct region borders
-  let mData = context.getImageData(0, 0, canvas.width, canvas.height);
+  let landData = land.getImageData(0, 0, land.canvas.width, land.canvas.height);
 
   edges
   .filter(edge => edge.left && edge.right)
@@ -159,7 +150,7 @@ function buildMapImageURL(width, height, appu, regions, edges) {
       .map(p => p.map(c => Math.floor(c * appu)));
 
     if (t1.terrain >= 0 && t2.terrain >= 0)
-      bline(mData, 0.4, ...mEdge, ...Brown);
+      bline(landData, 0.4, ...mEdge, ...Brown);
     
     let slope = Math.abs((edge[0][1]-edge[1][1]) / (edge[0][0]-edge[1][0]));
     let coast = Math.sign(t1.terrain) !== Math.sign(t2.terrain);
@@ -175,7 +166,7 @@ function buildMapImageURL(width, height, appu, regions, edges) {
           let dest = [point[0], point[1] + y - tileSize / 2];
           if (pointInQuad(dest, mQuad)) {
             let sample = getPixel(tile, point[0] % tile.width, y);
-            drawPixel(mData, ...dest, ...sample);
+            drawPixel(landData, ...dest, ...sample);
           }
         }
       });
@@ -189,16 +180,23 @@ function buildMapImageURL(width, height, appu, regions, edges) {
           let dest = [point[0] + x - tileSize / 2, point[1]];
           if (pointInQuad(dest, mQuad)) {
             let sample = getPixel(tile, x, point[1] % tile.height);
-            drawPixel(mData, ...dest, ...sample);
+            putPixel(landData, ...dest, ...sample);
           }
         }
       });
     }
-
   });
+  land.putImageData(landData, 0, 0);
 
-  context.putImageData(mData, 0, 0);
-  return canvas.toDataURL();
+  // create and composite map
+  let map = new Canvas(width * appu, height * appu).getContext('2d');
+  let water = new Canvas.Image;
+  water.src = sprites.water;
+  map.fillStyle = map.createPattern(water, 'repeat');
+  map.fillRect(0, 0, map.canvas.width, map.canvas.height);
+  map.drawImage(land.canvas, 0, 0);
+
+  return map.canvas.toDataURL();
 }
 
 /************
