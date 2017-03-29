@@ -22,6 +22,7 @@ const NORTHCOAST = [1, 81];
 const SOUTHCOAST = [33, 113];
 const WESTCOAST = [16, 96];
 const EASTCOAST = [18, 98];
+const WATER = [336, 338];
 
 var autoreload = true;
 var port  = 4000;
@@ -33,26 +34,29 @@ var gameTimeouts = new Map();
 const sprites = {
   water: fs.readFileSync('./public/water.png'),
   grass: fs.readFileSync('./public/grass2.png'),
-  tileset: fs.readFileSync('./public/tileset.png'),
+  tileset: fs.readFileSync('./public/tileset_water.png'),
 };
 
 let tileSize = 16;
-let tilesetImage = new PNG(sprites.tileset);
-let tileset = [];
+let tileset = sliceSpriteSheet(new PNG(sprites.tileset), tileSize);
 
-tilesetImage.decode(data => {
-  for (let i = 0; i < data.length; i += tileSize * 4) {
-    let row = data.slice(i, i + tileSize * 4);
-    let tx = Math.floor(i/4 % tilesetImage.width / tileSize);
-    let ty = Math.floor(i/4 / tilesetImage.width / tileSize);
-    let ti = tx + ty * tilesetImage.width / tileSize;
-    if (ti === tileset.length) {
-      let tile = {width: tileSize, height: tileSize, data: []};
-      tileset.push(tile);
+function sliceSpriteSheet(image, size) {
+  let sprites = [];
+  image.decode(data => {
+    for (let p = 0; p < data.length / 4; p += size) {
+      let row = data.slice(p * 4, (p + size) * 4);
+      let tx = Math.floor(p % image.width / size);
+      let ty = Math.floor(p / image.width / size);
+      let ti = tx + ty * image.width / size;
+      if (ti === sprites.length)
+        sprites.push(new Canvas.ImageData(size, size));
+      let offset = Math.floor(p / image.width) % size * size;
+      sprites[ti].data.set(row, offset * 4);
     }
-    tileset[ti].data.push(...row);
-  }
-});
+  });
+  sprites.size = size;
+  return sprites;
+}
 
 
 /***********
@@ -195,17 +199,9 @@ function buildMapImageURL(map, regions, edges, frame) {
   // create and composite map
   let context = new Canvas(width * appu, height * appu).getContext('2d');
 
-  let water = new Canvas.Image;
-  water.src = sprites.water;
-  let wts = [32, 31]
-  let wFrames = 15;
-
-  for (let x = 0; x < width * appu; x += wts[0]) {
-    for (let y = 0; y < width * appu; y += wts[1]) {
-      let f = (x + y) % wFrames;
-      context.drawImage(water, f * wts[0], frame % 2, ...wts, x, y, ...wts);
-    }
-  }
+  for (let x = 0; x < width * appu; x += tileSize)
+    for (let y = 0; y < width * appu; y += tileSize)
+      context.putImageData(tileset[WATER[(frame+x+y) % WATER.length]], x, y);
 
   context.drawImage(land.canvas, 0, 0);
   return context.canvas.toDataURL();
