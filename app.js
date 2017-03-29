@@ -31,7 +31,7 @@ var gameTimeouts = new Map();
 
 // TODO load asset directory automatically, maybe async
 const sprites = {
-  water: fs.readFileSync('./public/water2.png'),
+  water: fs.readFileSync('./public/water.png'),
   grass: fs.readFileSync('./public/grass2.png'),
   tileset: fs.readFileSync('./public/tileset.png'),
 };
@@ -164,7 +164,6 @@ function buildMapImageURL(map, regions, edges, frame) {
     if (coast && slope < 1) {
       let tileIds = NS[0].terrain < 0 ? NORTHCOAST : SOUTHCOAST;
       let tile = tileset[tileIds[(frame+edge.left.index) % tileIds.length]];
-
       blinePoints(...mEdge).forEach(point => {
         for (let y = 0; y < tile.height; ++y) {
           let dest = [point[0], point[1] + y - tileSize / 2];
@@ -195,12 +194,20 @@ function buildMapImageURL(map, regions, edges, frame) {
 
   // create and composite map
   let context = new Canvas(width * appu, height * appu).getContext('2d');
+
   let water = new Canvas.Image;
   water.src = sprites.water;
-  context.fillStyle = context.createPattern(water, 'repeat');
-  context.fillRect(0, 0, width * appu, height * appu);
-  context.drawImage(land.canvas, 0, 0);
+  let wts = [32, 31]
+  let wFrames = 15;
 
+  for (let x = 0; x < width * appu; x += wts[0]) {
+    for (let y = 0; y < width * appu; y += wts[1]) {
+      let f = (x + y) % wFrames;
+      context.drawImage(water, f * wts[0], frame % 2, ...wts, x, y, ...wts);
+    }
+  }
+
+  context.drawImage(land.canvas, 0, 0);
   return context.canvas.toDataURL();
 }
 
@@ -228,7 +235,9 @@ function Game(mapDef, turnTime) {
   map.terrainGen(regions, rng);
 
   // generate map image
-  map.imageURL = buildMapImageURL(map, regions, diagram.edges, 0);
+  map.imageURLs = [];
+  for (let i = 0; i < 2; ++i)
+    map.imageURLs.push(buildMapImageURL(map, regions, diagram.edges, i));
 
   let game = Object.assign({
     regions,

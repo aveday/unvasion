@@ -29,6 +29,8 @@ let mouse = {};
 
 let sppu;
 let map;
+let frame = 0;
+let frameInterval;
 
 let regions, players;
 
@@ -107,7 +109,8 @@ function drawMoves(targets, origin) {
 function draw() {
   if (usePixelArt) {
     context.imageSmoothingEnabled = false;
-    context.drawImage(map.img, 0, 0, map.width * sppu, map.height * sppu)
+    let img = map.imgs[frame % map.imgs.length];
+    context.drawImage(img, 0, 0, map.width * sppu, map.height * sppu)
 
     let soldier = document.getElementById("soldier");
     regions.filter(region => region.units.length).forEach(region => {
@@ -170,6 +173,8 @@ function initCanvas() {
   //TODO this automatically by putting both elements in a div
   panel.progressBorder.style.width = canvas.width + "px";
 
+  clearInterval(frameInterval);
+  frameInterval = setInterval(() => {++frame; draw()}, 1000);
   draw(); 
 }
 
@@ -226,10 +231,14 @@ function loadState(state) {
 
 function loadMap(newMap) {
   map = Object.assign({}, newMap);
-
-  map.img = new Image();
-  map.img.src = map.imageURL;
-  map.img.onload = initCanvas;
+  
+  map.imgs = [];
+  map.imageURLs.forEach(url => {
+    let img = new Image();
+    img.src = url;
+    img.onload = initCanvas; //FIXME shouldn't init every frame
+    map.imgs.push(img);
+  });
 }
 
 progressBar.start = function(turnTime) {
