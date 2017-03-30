@@ -128,7 +128,7 @@ function buildMapImageURL(map, sites, diagram, frame) {
   land.fillStyle = land.createPattern(grass, 'repeat');
   polygons
     .filter(poly => poly.data.terrain >= 0)
-    .forEach(poly => fillShape(land, 0, 0, scale(poly, appu), 1, 0));
+    .forEach(poly => fillShape(land, 0, 0, poly.deepMap(c => c * appu), 1, 0));
 
   // construct region borders
   let landData = land.getImageData(0, 0, land.canvas.width, land.canvas.height);
@@ -139,10 +139,11 @@ function buildMapImageURL(map, sites, diagram, frame) {
     let s1 = sites[edge.left.data.id];
     let s2 = sites[edge.right.data.id];
 
-    let mQuad = scale([s1, edge[0], s2, edge[1]], appu);
+    let mEdge = edge.deepMap(c => c * appu);
+    let mQuad = [s1, edge[0], s2, edge[1]].deepMap(c => c * appu);
 
     if (s1.terrain >= 0 && s2.terrain >= 0)
-      bline(landData, 1, ...scale(edge, appu), 90, 128, 44, 225);
+      bline(landData, 1, ...mEdge, 90, 128, 44, 225);
     
     let slope = Math.abs((edge[0][1]-edge[1][1]) / (edge[0][0]-edge[1][0]));
     let coast = (s1.terrain < 0) !== (s2.terrain < 0);
@@ -154,7 +155,7 @@ function buildMapImageURL(map, sites, diagram, frame) {
     if (coast && slope < 1) {
       let tileIds = NS[0].terrain < 0 ? NORTHCOAST : SOUTHCOAST;
       let tile = tileset[tileIds[(frame+edge.left.index) % tileIds.length]];
-      blinePoints(...scale(edge, appu)).forEach(point => {
+      blinePoints(...mEdge).forEach(point => {
         for (let y = 0; y < tile.height; ++y) {
           let dest = [point[0], point[1] + y - tileSize / 2];
           if (pointInQuad(dest, mQuad)) {
@@ -169,7 +170,7 @@ function buildMapImageURL(map, sites, diagram, frame) {
     if (coast && slope >= 1) {
       let tileIds = EW[0].terrain < 0 ? WESTCOAST : EASTCOAST;
       let tile = tileset[tileIds[(frame+edge.left.index) % tileIds.length]];
-      blinePoints(...scale(edge, appu)).forEach(point => {
+      blinePoints(...mEdge).forEach(point => {
         for (let x = 0; x < tile.width; ++x) {
           let dest = [point[0] + x - tileSize / 2, point[1]];
           if (pointInQuad(dest, mQuad)) {
@@ -575,9 +576,13 @@ function pointInQuad(point, quad) {
       || cross.every(c => c < 0);
 }
 
-function scale(arr, n) {
-  if (typeof(arr) === "number")
-    return arr * n;
-  return arr.map(element => scale(element, n));
+function deepMap(array, callback) {
+  return Array.isArray(array)
+    ? array.map(element => deepMap(element, callback))
+    : callback(array);
+}
+
+Array.prototype.deepMap = function(callback) {
+  return deepMap(this, callback);
 }
 
