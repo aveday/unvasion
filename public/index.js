@@ -107,10 +107,10 @@ function drawMoves(targets, origin) {
 }
 
 function draw() {
-  if (usePixelArt) {
+  if (usePixelArt && mapImages.length) {
     context.imageSmoothingEnabled = false;
-    let image = mapImages[frame % mapImages.length];
-    context.drawImage(image, 0, 0, image.width * mapScale, image.height * mapScale)
+    let img = mapImages[frame % mapImages.length];
+    context.drawImage(img, 0, 0, img.width * mapScale, img.height * mapScale);
 
     let soldier = document.getElementById("soldier");
     regions.filter(region => region.units.length).forEach(region => {
@@ -229,15 +229,16 @@ function loadState(state) {
   players = state.players;
   regions = state.regions;
   panel.playerCount.innerHTML = players.length;
+  draw();
 }
 
 function loadMap(imageURLs) {
   imageURLs.forEach(url => {
     let image = new Image();
     image.src = url;
-    image.onload = initCanvas; //FIXME shouldn't init every frame
     mapImages.push(image);
   });
+  mapImages[0].onload = initCanvas;
 }
 
 progressBar.start = function(turnTime) {
