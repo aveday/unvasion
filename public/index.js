@@ -13,6 +13,7 @@ let panel = {
 const sprites = {
   soldier: document.getElementById("soldier"),
   flagbearer: document.getElementById("flagbearer"),
+  town: document.getElementById("town"),
 }
 
 const BUILDING_PARTS = 7;
@@ -116,8 +117,8 @@ function drawMoves(targets, origin) {
 
 function scaledDraw(context, image, position, center=true) {
   context.drawImage(image,
-    position[0] * geoScale - (center ? image.width / 2 : 0),
-    position[1] * geoScale - (center ? image.height / 2 : 0),
+    position[0] * geoScale - (center ? mapScale*image.width / 2 : 0),
+    position[1] * geoScale - (center ? mapScale*image.height / 2 : 0),
     image.width * mapScale,
     image.height * mapScale);
 }
@@ -130,9 +131,13 @@ function draw() {
     let img = mapImages[frame % mapImages.length];
     scaledDraw(context, img, [0, 0], false);
     // draw unit sprites
-    for (const region of regions)
+    for (const region of regions.filter(r => r.units.length))
       unitPositions(region).forEach((pos, i) =>
         scaledDraw(context, i ? sprites.soldier : sprites.flagbearer, pos));
+    // draw buildings
+    for (const region of regions.filter(r => r.building))
+        scaledDraw(context, sprites.town, [region.x, region.y]);
+
 
   } else {
     // water
@@ -179,7 +184,7 @@ function initCanvas() {
   let {width, height} = mapImages[0];
 
   mapScale = Math.floor(Math.min(maxHeight / height, maxWidth / width));
-  geoScale = mapScale * 16; //appu FIXME
+  geoScale = mapScale * 24; //appu FIXME
 
   // restrict canvas size
   canvas.width = width * mapScale;

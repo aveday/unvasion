@@ -52,7 +52,7 @@ http.listen(port, () => console.log("Server started on port", port));
 var poissonVoronoi = {
   width: 16,
   height: 16,
-  appu: 16,
+  appu: 24,
   seed: 3213,
 };
 
