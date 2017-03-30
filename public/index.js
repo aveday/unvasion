@@ -12,7 +12,7 @@ let panel = {
 
 const sprites = {
   soldier: document.getElementById("soldier"),
-  flag: document.getElementById("flag"),
+  flagbearer: document.getElementById("flagbearer"),
 }
 
 const BUILDING_PARTS = 7;
@@ -78,21 +78,25 @@ function drawPlans(targets, origin) {
   });
 }
 
-function drawUnits(region) {
-  if (region.units.length === 0) return;
-  let pos = [region.x, region.y];
-
-  context.fillStyle = playerColor(region.player);
-
-  context.beginPath();
-  region.units.forEach((unit, i) => {
-    let spot = unitSpots[i]
-      .map(c => c * (1 + 5/region.units.length))
-      .map((c, i) => (pos[i] + c) * geoScale);
-
-    context.moveTo(...spot);
-    context.arc(...spot, UNIT_SIZE * geoScale, 0, 2 * Math.PI);
+function unitPositions(region) {
+  //TODO calculate and parameterise unit spread
+  return region.units.map((unit, i) => {
+    let spot = unitSpots[i].map(c => c * (1 + 4/region.units.length));
+    return [region.x + spot[0], region.y + spot[1]]
   });
+}
+
+function drawUnits(region, draw) {
+  if (region.units.length === 0) return;
+  context.fillStyle = playerColor(region.player);
+  context.beginPath();
+
+  for (const pos of unitPositions(region)) {
+    let screenPos = pos.map(c => c*geoScale);
+    context.moveTo(...screenPos);
+    context.arc( ...screenPos, UNIT_SIZE * geoScale, 0, 2 * Math.PI);
+  }
+
   context.closePath();
   context.fill();
 }
@@ -119,21 +123,16 @@ function scaledDraw(context, image, position, center=true) {
 }
 
 function draw() {
+
   if (usePixelArt && mapImages.length) {
     // draw map image
     context.imageSmoothingEnabled = false;
     let img = mapImages[frame % mapImages.length];
     scaledDraw(context, img, [0, 0], false);
-
     // draw unit sprites
-    regions.filter(region => region.units.length).forEach(region => {
-      unitSpots.slice(0, region.units.length+1).forEach((unitSpot, i) => {
-        //TODO calculate and parameterise unit spread
-        let spot = unitSpot.map(c => c * (1 + 4/region.units.length));
-        let pos = [region.x + spot[0], region.y + spot[1]]
-        scaledDraw(context, i ? sprites.soldier : sprites.flag, pos);
-      });
-    });
+    for (const region of regions)
+      unitPositions(region).forEach((pos, i) =>
+        scaledDraw(context, i ? sprites.soldier : sprites.flagbearer, pos));
 
   } else {
     // water
