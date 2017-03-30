@@ -10,12 +10,17 @@ let panel = {
   playerCount: document.getElementById("playerCount"),
 };
 
+const sprites = {
+  soldier: document.getElementById("soldier"),
+  flag: document.getElementById("flag"),
+}
+
 const BUILDING_PARTS = 7;
 const UNIT_SIZE = 0.04;
 const GAP_SIZE = 0.05;
 const DASH_SIZE = 0.1;
 
-let usePixelArt = false;
+let usePixelArt = true;
 let blines = true;
 
 let playerColors = ["blue", "red"];
@@ -81,7 +86,10 @@ function drawUnits(region) {
 
   context.beginPath();
   region.units.forEach((unit, i) => {
-    let spot = unitSpots[i].map((c, i) => (pos[i] + c) * geoScale);
+    let spot = unitSpots[i]
+      .map(c => c * (1 + 5/region.units.length))
+      .map((c, i) => (pos[i] + c) * geoScale);
+
     context.moveTo(...spot);
     context.arc(...spot, UNIT_SIZE * geoScale, 0, 2 * Math.PI);
   });
@@ -102,19 +110,29 @@ function drawMoves(targets, origin) {
       Math.atan2(target.y - origin.y, target.x - origin.x)));
 }
 
+function scaledDraw(context, image, position, center=true) {
+  context.drawImage(image,
+    position[0] * geoScale - (center ? image.width / 2 : 0),
+    position[1] * geoScale - (center ? image.height / 2 : 0),
+    image.width * mapScale,
+    image.height * mapScale);
+}
+
 function draw() {
   if (usePixelArt && mapImages.length) {
+    // draw map image
     context.imageSmoothingEnabled = false;
     let img = mapImages[frame % mapImages.length];
-    context.drawImage(img, 0, 0, img.width * mapScale, img.height * mapScale);
+    scaledDraw(context, img, [0, 0], false);
 
-    let soldier = document.getElementById("soldier");
+    // draw unit sprites
     regions.filter(region => region.units.length).forEach(region => {
-      context.drawImage(soldier,
-        region.x * geoScale,
-        region.y * geoScale,
-        soldier.width * mapScale,
-        soldier.height * mapScale);
+      unitSpots.slice(0, region.units.length+1).forEach((unitSpot, i) => {
+        //TODO calculate and parameterise unit spread
+        let spot = unitSpot.map(c => c * (1 + 4/region.units.length));
+        let pos = [region.x + spot[0], region.y + spot[1]]
+        scaledDraw(context, i ? sprites.soldier : sprites.flag, pos);
+      });
     });
 
   } else {

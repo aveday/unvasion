@@ -236,7 +236,7 @@ function Game(mapDef, turnTime) {
   });
 
   // find spots for units in regions
-  let n = 8;
+  let n = 10; // TODO adapt n to map/game
   let spots = new Poisson([n, n], 1).fill().deepMap(c => c/n - 1/2);
   spots.sort((a, b) => distSq(...a, 0, 0) - distSq(...b, 0, 0));
 
