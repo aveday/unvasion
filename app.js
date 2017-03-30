@@ -295,7 +295,8 @@ function loadCommands(game, player, commandIds) {
  Region Utilities
  **************/
 
-function areEnemies(region1, region2) { return region1.player !== region2.player
+function areEnemies(region1, region2) {
+  return region1.player !== region2.player
       && region1.units.length
       && region2.units.length;
 }
