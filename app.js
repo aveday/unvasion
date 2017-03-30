@@ -227,6 +227,7 @@ function Game(mapDef, turnTime) {
   // initialize regions
   let regions = map.polygons.map((poly, i) => Region(poly, i));
 
+  // find connected regions
   map.edges.forEach(edge => {
     if (edge.left && edge.right) {
       regions[edge.left.index].connected.push(edge.right.index);
@@ -234,15 +235,21 @@ function Game(mapDef, turnTime) {
     }
   });
 
+  // find spots for units in regions
+  let n = 8;
+  let spots = new Poisson([n, n], 1).fill().deepMap(c => c/n - 1/2);
+  spots.sort((a, b) => distSq(...a, 0, 0) - distSq(...b, 0, 0));
+
   let game = Object.assign({
     regions,
     map,
     turnTime,
     players,
+    spots,
     waitingOn: new Set(),
     nextId: 0,
     turnCount: 0,
-    state: {regions, players},
+    state: {regions, players, spots},
     imageURLs: [],
   });
 

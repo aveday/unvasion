@@ -15,7 +15,7 @@ const UNIT_SIZE = 0.04;
 const GAP_SIZE = 0.05;
 const DASH_SIZE = 0.1;
 
-let usePixelArt = true;
+let usePixelArt = false;
 let blines = true;
 
 let playerColors = ["blue", "red"];
@@ -32,7 +32,7 @@ let mapImages = [];
 let frame = 0;
 let frameInterval;
 
-let regions, players;
+let regions, players, unitSpots;
 
 function corner(region) {
   return [(region.x - 0.5) * geoScale, (region.y - 0.5) * geoScale];
@@ -75,20 +75,16 @@ function drawPlans(targets, origin) {
 
 function drawUnits(region) {
   if (region.units.length === 0) return;
-  let [x, y] = corner(region);
+  let pos = [region.x, region.y];
 
   context.fillStyle = playerColor(region.player);
 
-  let e = Math.ceil(Math.sqrt(region.units.length));
-  let m = Math.floor((e*e - region.units.length) / 2);
-
   context.beginPath();
-  for (let n = m; n < region.units.length + m; ++n) {
-    let ux = x + (Math.floor(n / e) + 0.5)/e *  geoScale;
-    let uy = y + (n % e + 0.5)/e *  geoScale;
-    context.moveTo(ux, uy);
-    context.arc(ux, uy, UNIT_SIZE * geoScale, 0, 2 * Math.PI);
-  }
+  region.units.forEach((unit, i) => {
+    let spot = unitSpots[i].map((c, i) => (pos[i] + c) * geoScale);
+    context.moveTo(...spot);
+    context.arc(...spot, UNIT_SIZE * geoScale, 0, 2 * Math.PI);
+  });
   context.closePath();
   context.fill();
 }
@@ -226,6 +222,7 @@ function sendCommands() {
 }
 
 function loadState(state) {
+  unitSpots = state.spots; //FIXME this is static, shouldn't be updated
   players = state.players;
   regions = state.regions;
   panel.playerCount.innerHTML = players.length;
