@@ -73,8 +73,6 @@ http.listen(port, () => console.log("Server started on port", port));
  ***************/
 
 var poissonVoronoi = {
-  mapGen: poissonVoronoiMap,
-  terrainGen: simplexTerrain,
   width: 16,
   height: 16,
   appu: 16,
@@ -85,11 +83,12 @@ var poissonVoronoi = {
  Map Generation
  **************/
 
-function Region(points, id) {
-  let x = average(...points.map(p => p[0]));
-  let y = average(...points.map(p => p[1]));
+function Region(points) {
+  let [x, y] = points.data;
   return {
-    id, x, y, points,
+    x, y, points,
+    terrain: points.data.terrain,
+    id: points.data.id,
     units: [],
     connected: [],
     attackedBy: [],
@@ -98,48 +97,38 @@ function Region(points, id) {
   };
 }
 
-function simplexTerrain(regions, rng) {
-  let offset = 0.1;
-  let octaves = [
-    {scale: 0.20, amp: 0.8},
-    {scale: 0.03, amp: 1.0},
-  ];
-
+function simplexTerrain(rng) {
+  let terrain = {
+    offset: 0.1,
+    octaves: [
+      {scale: 0.20, amp: 0.8},
+      {scale: 0.03, amp: 1.0}],
+  };
   let simplex = new SimplexNoise(rng);
-  regions.forEach(t => {
-    t.terrain = offset;
-    for (let n of octaves)
-      t.terrain += n.amp * simplex.noise2D(t.x * n.scale, t.y * n.scale);
-  });
-}
-
-function poissonVoronoiMap(width, height, rng) {
-  let size = [width, height];
-
-  // generate poisson disk distribution
-  let points = new Poisson(size, 1, 1, 30, rng).fill();
-  points.forEach((point, i) => point.id = i);
-
-  // find voronoi diagram of points
-  return voronoi().size(size)(points);
+  return function (x, y) {
+    return terrain.octaves.reduce((z, n) => {
+      return z + n.amp * simplex.noise2D(x * n.scale, y * n.scale);
+    }, terrain.offset);
+  }
 }
 
 /*********
  Pixel Map
  *********/
 
-function buildMapImageURL(map, regions, edges, frame) {
+function buildMapImageURL(map, sites, diagram, frame) {
   let {width, height, appu} = map;
+  let {edges} = diagram;
+  let polygons = diagram.polygons();
 
   // create land
   let land = new Canvas(width * appu, height * appu).getContext('2d');
   let grass = new Canvas.Image;
   grass.src = sprites.grass;
   land.fillStyle = land.createPattern(grass, 'repeat');
-  regions.filter(t => t.terrain >= 0).forEach(t => {
-    let points = t.points.map(p => p.map(c => c*appu));
-    fillShape(land, 0, 0, points, 1, 0);
-  });
+  polygons
+    .filter(poly => poly.data.terrain >= 0)
+    .forEach(poly => fillShape(land, 0, 0, scale(poly, appu), 1, 0));
 
   // construct region borders
   let landData = land.getImageData(0, 0, land.canvas.width, land.canvas.height);
@@ -147,28 +136,25 @@ function buildMapImageURL(map, regions, edges, frame) {
   edges
   .filter(edge => edge.left && edge.right)
   .forEach(edge => {
-    let t1 = regions[edge.left.data.id];
-    let t2 = regions[edge.right.data.id];
+    let s1 = sites[edge.left.data.id];
+    let s2 = sites[edge.right.data.id];
 
-    let mEdge = [...edge[0], ...edge[1]]
-      .map(c => Math.floor(c * appu));
-    let mQuad = [[t1.x, t1.y], edge[0], [t2.x, t2.y], edge[1]]
-      .map(p => p.map(c => Math.floor(c * appu)));
+    let mQuad = scale([s1, edge[0], s2, edge[1]], appu);
 
-    if (t1.terrain >= 0 && t2.terrain >= 0)
-      bline(landData, 1, ...mEdge, 90, 128, 44, 225);
+    if (s1.terrain >= 0 && s2.terrain >= 0)
+      bline(landData, 1, ...scale(edge, appu), 90, 128, 44, 225);
     
     let slope = Math.abs((edge[0][1]-edge[1][1]) / (edge[0][0]-edge[1][0]));
-    let coast = Math.sign(t1.terrain) !== Math.sign(t2.terrain);
+    let coast = (s1.terrain < 0) !== (s2.terrain < 0);
 
-    let NS = [t1, t2].sort((t1, t2) => t1.y > t2.y);
-    let EW = [t1, t2].sort((t1, t2) => t1.x > t2.x);
+    let NS = [s1, s2].sort((s1, s2) => s1[1] > s2[1]);
+    let EW = [s1, s2].sort((s1, s2) => s1[0] > s2[0]);
 
     // East-West coastline
     if (coast && slope < 1) {
       let tileIds = NS[0].terrain < 0 ? NORTHCOAST : SOUTHCOAST;
       let tile = tileset[tileIds[(frame+edge.left.index) % tileIds.length]];
-      blinePoints(...mEdge).forEach(point => {
+      blinePoints(...scale(edge, appu)).forEach(point => {
         for (let y = 0; y < tile.height; ++y) {
           let dest = [point[0], point[1] + y - tileSize / 2];
           if (pointInQuad(dest, mQuad)) {
@@ -183,7 +169,7 @@ function buildMapImageURL(map, regions, edges, frame) {
     if (coast && slope >= 1) {
       let tileIds = EW[0].terrain < 0 ? WESTCOAST : EASTCOAST;
       let tile = tileset[tileIds[(frame+edge.left.index) % tileIds.length]];
-      blinePoints(...mEdge).forEach(point => {
+      blinePoints(...scale(edge, appu)).forEach(point => {
         for (let x = 0; x < tile.width; ++x) {
           let dest = [point[0] + x - tileSize / 2, point[1]];
           if (pointInQuad(dest, mQuad)) {
@@ -218,22 +204,28 @@ function Game(mapDef, turnTime) {
   let map = Object.assign({}, mapDef);
   let rng = new Alea(map.seed);
 
-  let diagram = map.mapGen(map.width, map.height, rng);
-  let regions = diagram.polygons().map(poly => Region(poly, poly.data.id));
+  // generate poisson disk distribution of sites
+  let size = [map.width, map.height];
+  let sites = new Poisson(size, 1, 1, 30, rng).fill();
+
+  // generate site terrain
+  let zGen = simplexTerrain(rng);
+  sites.forEach((s, i) => [s.id, s.terrain] = [i, zGen(...s)]);
+
+  // find voronoi diagram of sites
+  let diagram = voronoi().size(size)(sites);
+  let regions = diagram.polygons().map(Region);
 
   // find connected cells
-  diagram.links().forEach(link => {
+  diagram.links().forEach((link,i) => {
     regions[link.source.id].connected.push(link.target.id);
     regions[link.target.id].connected.push(link.source.id);
   });
 
-  // generate region terrain
-  map.terrainGen(regions, rng);
-
   // generate map image
   map.imageURLs = [];
-  for (let i = 0; i < 2; ++i)
-    map.imageURLs.push(buildMapImageURL(map, regions, diagram.edges, i));
+  for (let i = 0; i < 2; ++i) //TODO send immediately as generated
+    map.imageURLs.push(buildMapImageURL(map, sites, diagram, i));
 
   let game = Object.assign({
     regions,
@@ -532,11 +524,12 @@ function putPixel(imageData, x, y, r, g, b, a) {
   imageData.data[n+3] = a;
 }
 
-function blinePoints(x0, y0, x1, y1) {
+function blinePoints(p0, p1) {
+  let [x0, y0] = p0.map(Math.floor);
+  let [x1, y1] = p1.map(Math.floor);
   var dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
   var dy = Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1; 
   var err = (dx > dy ? dx : -dy)/2;        
-
 
   let points = []
   let attempts = 100
@@ -552,8 +545,8 @@ function blinePoints(x0, y0, x1, y1) {
   return points;
 }
 
-function bline(imageData, prob, x0, y0, x1, y1, ...color) {
-  blinePoints(x0, y0, x1, y1)
+function bline(imageData, prob, p0, p1, ...color) {
+  blinePoints(p0, p1)
     .filter(() => Math.random() < prob)
     .forEach(point => putPixel(imageData, ...point, ...color));
 }
@@ -580,5 +573,11 @@ function pointInQuad(point, quad) {
   }
   return cross.every(c => c >= 0)
       || cross.every(c => c < 0);
+}
+
+function scale(arr, n) {
+  if (typeof(arr) === "number")
+    return arr * n;
+  return arr.map(element => scale(element, n));
 }
 
