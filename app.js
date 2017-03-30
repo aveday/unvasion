@@ -18,11 +18,11 @@ const REGION_MAX = 36;
 const UNIT_COEFFICIENT = 2;
 const SPAWN_REQ = REGION_MAX / UNIT_COEFFICIENT;
 
-const NORTHCOAST = [1, 81];
-const SOUTHCOAST = [33, 113];
-const WESTCOAST = [16, 96];
-const EASTCOAST = [18, 98];
-const WATER = [336, 338];
+const NORTHCOAST = [[1,  0], [1,  5]];
+const SOUTHCOAST = [[1,  2], [1,  7]];
+const WESTCOAST  = [[0,  1], [0,  6]];
+const EASTCOAST  = [[2,  1], [2,  6]];
+const WATER      = [[0, 21], [2, 21]];
 
 var autoreload = true;
 var port  = 4000;
@@ -32,32 +32,9 @@ var gameTimeouts = new Map();
 
 // TODO load asset directory automatically, maybe async
 const sprites = {
-  water: fs.readFileSync('./public/water.png'),
   grass: fs.readFileSync('./public/grass2.png'),
-  tileset: fs.readFileSync('./public/tileset_water.png'),
+  tiles: PNG.load('./public/tileset_water.png'),
 };
-
-let tileSize = 16;
-let tileset = sliceSpriteSheet(new PNG(sprites.tileset), tileSize);
-
-function sliceSpriteSheet(image, size) {
-  let sprites = [];
-  image.decode(data => {
-    for (let p = 0; p < data.length / 4; p += size) {
-      let row = data.slice(p * 4, (p + size) * 4);
-      let tx = Math.floor(p % image.width / size);
-      let ty = Math.floor(p / image.width / size);
-      let ti = tx + ty * image.width / size;
-      if (ti === sprites.length)
-        sprites.push(new Canvas.ImageData(size, size));
-      let offset = Math.floor(p / image.width) % size * size;
-      sprites[ti].data.set(row, offset * 4);
-    }
-  });
-  sprites.size = size;
-  return sprites;
-}
-
 
 /***********
  Server Init
@@ -83,12 +60,31 @@ var poissonVoronoi = {
  Map Generation
  **************/
 
-function Region(points) {
+function Island(mapDef) {
+  let map = Object.create(mapDef);
+  let rng = new Alea(map.seed);
+
+  // generate poisson disk distribution of sites
+  let size = [map.width, map.height];
+  map.sites = new Poisson(size, 1, 1, 30, rng).fill();
+
+  // generate site terrain
+  map.zGen = simplexTerrain(rng);
+  map.sites.forEach(s => s.terrain = map.zGen(...s));
+
+  // find voronoi diagram of sites
+  let diagram = voronoi().size(size)(map.sites);
+  map.polygons = diagram.polygons();
+  map.edges = diagram.edges;
+
+  return map;
+}
+
+function Region(points, id) {
   let [x, y] = points.data;
   return {
-    x, y, points,
+    x, y, points, id,
     terrain: points.data.terrain,
-    id: points.data.id,
     units: [],
     connected: [],
     attackedBy: [],
@@ -113,13 +109,35 @@ function simplexTerrain(rng) {
 }
 
 /*********
- Pixel Map
+ Map Image
  *********/
 
-function buildMapImageURL(map, sites, diagram, frame) {
-  let {width, height, appu} = map;
-  let {edges} = diagram;
-  let polygons = diagram.polygons();
+function LoadTileset(image, width, height, callback) {
+  let context = new Canvas(image.width, image.height).getContext("2d");
+  image.decode(data => {
+    data = new Uint8ClampedArray(data);
+    let imageData = new Canvas.ImageData(data, image.width, image.height);
+    context.putImageData(imageData, 0, 0);
+    callback({
+      width, height,
+      tile: (x, y, w = 1, h = 1) =>
+        context.getImageData(x*width, y*height, w*width, h*height),
+    });
+  });
+}
+
+function renderMap(map, frames, callback) {
+  map.imageURLs = [];
+  LoadTileset(sprites.tiles, 16, 16, tileset => {
+    //TODO send frames immediately as generated
+    for (let i = 0; i < frames; ++i)
+      map.imageURLs.push(buildMapImageURL(map, tileset, i));
+    callback(map.imageURLs);
+  });
+}
+
+function buildMapImageURL(map, tileset, frame) {
+  let {width, height, appu, edges, polygons} = map;
 
   // create land
   let land = new Canvas(width * appu, height * appu).getContext('2d');
@@ -136,8 +154,8 @@ function buildMapImageURL(map, sites, diagram, frame) {
   edges
   .filter(edge => edge.left && edge.right)
   .forEach(edge => {
-    let s1 = sites[edge.left.data.id];
-    let s2 = sites[edge.right.data.id];
+    let s1 = map.sites[edge.left.index];
+    let s2 = map.sites[edge.right.index];
 
     let mEdge = edge.deepMap(c => c * appu);
     let mQuad = [s1, edge[0], s2, edge[1]].deepMap(c => c * appu);
@@ -148,16 +166,15 @@ function buildMapImageURL(map, sites, diagram, frame) {
     let slope = Math.abs((edge[0][1]-edge[1][1]) / (edge[0][0]-edge[1][0]));
     let coast = (s1.terrain < 0) !== (s2.terrain < 0);
 
-    let NS = [s1, s2].sort((s1, s2) => s1[1] > s2[1]);
-    let EW = [s1, s2].sort((s1, s2) => s1[0] > s2[0]);
-
     // East-West coastline
     if (coast && slope < 1) {
-      let tileIds = NS[0].terrain < 0 ? NORTHCOAST : SOUTHCOAST;
-      let tile = tileset[tileIds[(frame+edge.left.index) % tileIds.length]];
+      let tile = [s1, s2].sort((s1, s2) => s1[1] > s2[1])[0].terrain < 0
+        ? tileset.tile(...NORTHCOAST[frame % NORTHCOAST.length])
+        : tileset.tile(...SOUTHCOAST[frame % SOUTHCOAST.length]);
+
       blinePoints(...mEdge).forEach(point => {
         for (let y = 0; y < tile.height; ++y) {
-          let dest = [point[0], point[1] + y - tileSize / 2];
+          let dest = [point[0], point[1] + y - tile.height / 2];
           if (pointInQuad(dest, mQuad)) {
             let sample = getPixel(tile, point[0] % tile.width, y);
             drawPixel(landData, ...dest, ...sample);
@@ -168,11 +185,12 @@ function buildMapImageURL(map, sites, diagram, frame) {
 
     // North-South coastlines
     if (coast && slope >= 1) {
-      let tileIds = EW[0].terrain < 0 ? WESTCOAST : EASTCOAST;
-      let tile = tileset[tileIds[(frame+edge.left.index) % tileIds.length]];
+      let tile = [s1, s2].sort((s1, s2) => s1[0] > s2[0])[0].terrain < 0
+        ? tileset.tile(...WESTCOAST[frame % WESTCOAST.length])
+        : tileset.tile(...EASTCOAST[frame % EASTCOAST.length]);
       blinePoints(...mEdge).forEach(point => {
         for (let x = 0; x < tile.width; ++x) {
-          let dest = [point[0] + x - tileSize / 2, point[1]];
+          let dest = [point[0] + x - tile.width / 2, point[1]];
           if (pointInQuad(dest, mQuad)) {
             let sample = getPixel(tile, x, point[1] % tile.height);
             putPixel(landData, ...dest, ...sample);
@@ -186,9 +204,10 @@ function buildMapImageURL(map, sites, diagram, frame) {
   // create and composite map
   let context = new Canvas(width * appu, height * appu).getContext('2d');
 
-  for (let x = 0; x < width * appu; x += tileSize)
-    for (let y = 0; y < width * appu; y += tileSize)
-      context.putImageData(tileset[WATER[(frame+x+y) % WATER.length]], x, y);
+  let waterTile = tileset.tile(...WATER[frame % WATER.length]);
+  for (let x = 0; x < width * appu; x += waterTile.width)
+    for (let y = 0; y < width * appu; y += waterTile.height)
+      context.putImageData(waterTile, x, y);
 
   context.drawImage(land.canvas, 0, 0);
   return context.canvas.toDataURL();
@@ -202,31 +221,18 @@ function Game(mapDef, turnTime) {
   console.log("Starting new game...");
   let players = [];
 
-  let map = Object.assign({}, mapDef);
-  let rng = new Alea(map.seed);
+  // create map
+  let map = Island(mapDef);
 
-  // generate poisson disk distribution of sites
-  let size = [map.width, map.height];
-  let sites = new Poisson(size, 1, 1, 30, rng).fill();
+  // initialize regions
+  let regions = map.polygons.map((poly, i) => Region(poly, i));
 
-  // generate site terrain
-  let zGen = simplexTerrain(rng);
-  sites.forEach((s, i) => [s.id, s.terrain] = [i, zGen(...s)]);
-
-  // find voronoi diagram of sites
-  let diagram = voronoi().size(size)(sites);
-  let regions = diagram.polygons().map(Region);
-
-  // find connected cells
-  diagram.links().forEach((link,i) => {
-    regions[link.source.id].connected.push(link.target.id);
-    regions[link.target.id].connected.push(link.source.id);
+  map.edges.forEach(edge => {
+    if (edge.left && edge.right) {
+      regions[edge.left.index].connected.push(edge.right.index);
+      regions[edge.right.index].connected.push(edge.left.index);
+    }
   });
-
-  // generate map image
-  map.imageURLs = [];
-  for (let i = 0; i < 2; ++i) //TODO send immediately as generated
-    map.imageURLs.push(buildMapImageURL(map, sites, diagram, i));
 
   let game = Object.assign({
     regions,
@@ -237,6 +243,7 @@ function Game(mapDef, turnTime) {
     nextId: 0,
     turnCount: 0,
     state: {regions, players},
+    imageURLs: [],
   });
 
   return game;
@@ -414,15 +421,22 @@ function playerSession(socket) {
   // start a new game session if there aren't any
   if (games.length === 0)
     games.push(Game(poissonVoronoi, 4000));
+
   let game = games[0];
 
   // add the player
   addPlayer(game, player);
-  io.emit("msg", "Connected to server");
+  socket.emit("msg", "Connected to server");
+
+  // render map if unrendered
+  let frames = 2;
+  if (game.map.imageURLs === undefined)
+    renderMap(game.map, frames, imageURLs => io.emit("sendMap", imageURLs));
+  else if (game.map.imageURLs.length === frames)
+    socket.emit("sendMap", game.map.imageURLs);
 
   socket.emit("sendPlayerId", player);
-  io.emit("sendState", game.state);
-  io.emit("sendMap", game.map);
+  socket.emit("sendState", game.state);
 
   socket.on("ready", () => readyPlayer(game, player));
   socket.on("sendCommands", cmdIds => loadCommands(game, player, cmdIds));

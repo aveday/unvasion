@@ -27,15 +27,15 @@ let player = 0;
 let commands = new Map();
 let mouse = {};
 
-let sppu;
-let map;
+let mapScale, geoScale;
+let mapImages = [];
 let frame = 0;
 let frameInterval;
 
 let regions, players;
 
 function corner(region) {
-  return [(region.x - 0.5) * sppu, (region.y - 0.5) * sppu];
+  return [(region.x - 0.5) * geoScale, (region.y - 0.5) * geoScale];
 }
 
 function playerColor(player) {
@@ -44,13 +44,13 @@ function playerColor(player) {
 }
 
 function drawRegion(region) {
-  context.fillShape(0, 0, region.points, sppu, 0);
+  context.fillShape(0, 0, region.points, geoScale, 0);
   context.stroke();
 }
 
 function drawBuilding(region) {
-  let gap = GAP_SIZE * sppu;
-  let size = sppu - gap * 2;
+  let gap = GAP_SIZE * geoScale;
+  let size = geoScale - gap * 2;
   let part = size / BUILDING_PARTS;
   let [x, y] = corner(region).map(c => c + gap);
 
@@ -65,8 +65,8 @@ function drawBuilding(region) {
 function drawPlans(targets, origin) {
   targets.forEach(target => {
     if (target === origin && origin.player === undefined) {
-      let gap = GAP_SIZE * sppu / 2;
-      let size = sppu - gap * 2;
+      let gap = GAP_SIZE * geoScale / 2;
+      let size = geoScale - gap * 2;
       let [x, y] = corner(origin).map(c => c + gap);
       context.strokeRect(x, y, size, size);
     }
@@ -84,10 +84,10 @@ function drawUnits(region) {
 
   context.beginPath();
   for (let n = m; n < region.units.length + m; ++n) {
-    let ux = x + (Math.floor(n / e) + 0.5)/e *  sppu;
-    let uy = y + (n % e + 0.5)/e *  sppu;
+    let ux = x + (Math.floor(n / e) + 0.5)/e *  geoScale;
+    let uy = y + (n % e + 0.5)/e *  geoScale;
     context.moveTo(ux, uy);
-    context.arc(ux, uy, UNIT_SIZE * sppu, 0, 2 * Math.PI);
+    context.arc(ux, uy, UNIT_SIZE * geoScale, 0, 2 * Math.PI);
   }
   context.closePath();
   context.fill();
@@ -99,26 +99,26 @@ function drawMoves(targets, origin) {
   //TODO fill red for attacks
   targets.forEach(target =>
     context.fillShape(
-      sppu * (target.x + origin.x) / 2,
-      sppu * (target.y + origin.y) / 2,
+      geoScale * (target.x + origin.x) / 2,
+      geoScale * (target.y + origin.y) / 2,
       target === origin ? shapes.square : shapes.arrow,
-      sppu / 8 / Math.sqrt(targets.length),
+      geoScale / 8 / Math.sqrt(targets.length),
       Math.atan2(target.y - origin.y, target.x - origin.x)));
 }
 
 function draw() {
   if (usePixelArt) {
     context.imageSmoothingEnabled = false;
-    let img = map.imgs[frame % map.imgs.length];
-    context.drawImage(img, 0, 0, map.width * sppu, map.height * sppu)
+    let image = mapImages[frame % mapImages.length];
+    context.drawImage(image, 0, 0, image.width * mapScale, image.height * mapScale)
 
     let soldier = document.getElementById("soldier");
     regions.filter(region => region.units.length).forEach(region => {
       context.drawImage(soldier,
-        region.x * sppu,
-        region.y * sppu,
-        soldier.width * sppu / map.appu,
-        soldier.height * sppu / map.appu);
+        region.x * geoScale,
+        region.y * geoScale,
+        soldier.width * mapScale,
+        soldier.height * mapScale);
     });
 
   } else {
@@ -143,7 +143,7 @@ function draw() {
   }
 
   // building commands
-  context.setLineDash([sppu*DASH_SIZE, sppu*DASH_SIZE]);
+  context.setLineDash([geoScale*DASH_SIZE, geoScale*DASH_SIZE]);
   context.strokeStyle = "yellow";
   commands.forEach(drawPlans);
   context.setLineDash([]);
@@ -163,12 +163,14 @@ function initCanvas() {
   let maxHeight = window.innerHeight * 0.95 - panel.header.offsetHeight;
   let maxWidth = window.innerWidth * 0.95;
 
-  sppu = Math.min(maxHeight / map.height, maxWidth / map.width);
-  sppu = Math.floor(sppu / map.appu) * map.appu;
+  let {width, height} = mapImages[0];
+
+  mapScale = Math.floor(Math.min(maxHeight / height, maxWidth / width));
+  geoScale = mapScale * 16; //appu FIXME
 
   // restrict canvas size
-  canvas.width = map.width * sppu;
-  canvas.height = map.height * sppu;
+  canvas.width = width * mapScale;
+  canvas.height = height * mapScale;
 
   //TODO this automatically by putting both elements in a div
   panel.progressBorder.style.width = canvas.width + "px";
@@ -229,15 +231,12 @@ function loadState(state) {
   panel.playerCount.innerHTML = players.length;
 }
 
-function loadMap(newMap) {
-  map = Object.assign({}, newMap);
-  
-  map.imgs = [];
-  map.imageURLs.forEach(url => {
-    let img = new Image();
-    img.src = url;
-    img.onload = initCanvas; //FIXME shouldn't init every frame
-    map.imgs.push(img);
+function loadMap(imageURLs) {
+  imageURLs.forEach(url => {
+    let image = new Image();
+    image.src = url;
+    image.onload = initCanvas; //FIXME shouldn't init every frame
+    mapImages.push(image);
   });
 }
 
@@ -262,12 +261,12 @@ function pointInRegion(region, x, y) {
   context.beginPath()
   region.points.forEach(point => context.lineTo(...point));
   context.closePath();
-  return context.isPointInPath(x / sppu, y / sppu);
+  return context.isPointInPath(x / geoScale, y / geoScale);
 }
 
 function getClickedRegion(e) {
   let [canvasX, canvasY] = elementCoords(canvas, e.pageX, e.pageY);
-  let [x, y] = [canvasX / sppu, canvasY / sppu];
+  let [x, y] = [canvasX / geoScale, canvasY / geoScale];
   let closest = closestPoint(x, y, regions);
   //let region = pointInRegion(closest, x, y) ? closest : undefined; FIXME
   return closest;
