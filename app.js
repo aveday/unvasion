@@ -178,7 +178,7 @@ function buildMapImageURL(map, tileset, frame) {
           let dest = [point[0], point[1] + y - tile.height / 2];
           if (pointInQuad(dest, mQuad)) {
             let sample = getPixel(tile, point[0] % tile.width, y);
-            drawPixel(landData, ...dest, ...sample);
+            putPixel(landData, ...dest, ...sample);
           }
         }
       });
