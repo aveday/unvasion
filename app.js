@@ -297,7 +297,8 @@ function startTurn(game) {
   io.emit("startTurn", game.turnTime);
   game.regions.forEach(region => setGroups(region, [region], [false]));
   game.waitingOn = new Set(game.players);
-  gameTimeouts.set(game, setTimeout(endTurn, game.turnTime, game));
+  if (game.turnTime)
+    gameTimeouts.set(game, setTimeout(endTurn, game.turnTime, game));
 }
 
 function endTurn(game) {
@@ -464,7 +465,7 @@ function playerSession(socket) {
   let player = newPlayer(socket);
   // start a new game session if there aren't any
   if (games.length === 0)
-    games.push(Game(poissonVoronoi, 4000));
+    games.push(Game(poissonVoronoi, 0));
 
   let game = games[0];
 

@@ -278,7 +278,8 @@ function startTurn(turnTime) {
       .filter(t => t.connected.some(id => regions[id].player === player))
       .forEach(t => addCommand(t, t));
 
-  progressBar.start(turnTime);
+  if (turnTime)
+    progressBar.start(turnTime);
 }
 
 function pointInRegion(region, x, y) {
