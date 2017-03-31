@@ -568,7 +568,6 @@ function drawPixel(imageData, x, y, r, g, b, a) {
   let n = (y * imageData.width + x) * 4;
   let [r0, g0, b0, a0] = imageData.data.slice(n, n+4);
 
-  //TODO use uint8array and uint8array.set
   imageData.data[n] =   (r*a + r0*a0 + r0*a*a0/0xff) / 0xff;
   imageData.data[n+1] = (g*a + g0*a0 + g0*a*a0/0xff) / 0xff;
   imageData.data[n+2] = (b*a + b0*a0 + b0*a*a0/0xff) / 0xff;
