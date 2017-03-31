@@ -51,8 +51,8 @@ http.listen(port, () => console.log("Server started on port", port));
  ***************/
 
 var poissonVoronoi = {
-  width: 16,
-  height: 16,
+  width: 8,
+  height: 8,
   appu: 24,
   seed: 3213,
 };
@@ -216,25 +216,15 @@ function buildMapImageURL(map, tileset, frame) {
     }
   });
 
-  edges
-  .filter(edge => edge.left)
-  .forEach(edge => {
-    let s1 = map.sites[edge.left.index];
-    // draw trees
-    if (edge.left.index % 4 === 0 && s1.terrain >= 0) {
-
-      let tile = tileset.tile(...TREES[frame % TREES.length]);
-
-      for (let x=0; x<tile.width; ++x) for(let y=0; y<tile.height; ++y) {
-
-        let dest = [edge.left[0]* appu + x, edge.left[1]* appu + y];
-        dest = dest.map(c => Math.floor(c));
-
-        let sample = getPixel(tile, x, y);
-        drawPixel(landData, ...dest, ...sample);
-      }
-    }
-
+  // draw trees
+  let treeTile = tileset.tile(...TREES[frame % TREES.length]);
+  edges.filter(edge => edge.left).forEach(edge => {
+    if (edge.left.index % 4 === 0 && map.sites[edge.left.index].terrain >= 0)
+      for (let x=0; x<treeTile.width; ++x)
+        for(let y=0; y<treeTile.height; ++y)
+          drawPixel(landData,
+            ...[x, y].map((c, i) => Math.floor(c + edge.left[i] * appu)),
+            ...getPixel(treeTile, x, y));
   });
   land.putImageData(landData, 0, 0);
 
