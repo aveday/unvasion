@@ -23,6 +23,7 @@ const SOUTHCOAST = [[1,  2], [1,  7]];
 const WESTCOAST  = [[0,  1], [0,  6]];
 const EASTCOAST  = [[2,  1], [2,  6]];
 const WATER      = [[0, 21], [2, 21]];
+const TREES      = [[12,20], [13,20]];
 
 var autoreload = true;
 var port  = 4000;
@@ -198,6 +199,27 @@ function buildMapImageURL(map, tileset, frame) {
         }
       });
     }
+  });
+
+  edges
+  .filter(edge => edge.left)
+  .forEach(edge => {
+    let s1 = map.sites[edge.left.index];
+    // draw trees
+    if (edge.left.index % 4 === 0 && s1.terrain >= 0) {
+
+      let tile = tileset.tile(...TREES[frame % TREES.length]);
+
+      for (let x=0; x<tile.width; ++x) for(let y=0; y<tile.height; ++y) {
+
+        let dest = [edge.left[0]* appu + x, edge.left[1]* appu + y];
+        dest = dest.map(c => Math.floor(c));
+
+        let sample = getPixel(tile, x, y);
+        drawPixel(landData, ...dest, ...sample);
+      }
+    }
+
   });
   land.putImageData(landData, 0, 0);
 
