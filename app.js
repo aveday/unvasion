@@ -18,24 +18,20 @@ const REGION_MAX = 36;
 const UNIT_COEFFICIENT = 2;
 const SPAWN_REQ = REGION_MAX / UNIT_COEFFICIENT;
 
+const tilesetImage = PNG.load('./public/tileset_water.png');
 const NORTHCOAST = [[1,  0], [1,  5]];
 const SOUTHCOAST = [[1,  2], [1,  7]];
 const WESTCOAST  = [[0,  1], [0,  6]];
 const EASTCOAST  = [[2,  1], [2,  6]];
 const WATER      = [[0, 21], [2, 21]];
 const TREES      = [[12,20], [13,20]];
+const GRASS      = [[ 1, 1]];
 
 var autoreload = true;
 var port  = 4000;
 var games = [];
 var sockets = [];
 var gameTimeouts = new Map();
-
-// TODO load asset directory automatically, maybe async
-const sprites = {
-  grass: fs.readFileSync('./public/grass2.png'),
-  tiles: PNG.load('./public/tileset_water.png'),
-};
 
 /***********
  Server Init
@@ -52,7 +48,7 @@ http.listen(port, () => console.log("Server started on port", port));
 
 var poissonVoronoi = {
   width: 16,
-  height: 18,
+  height: 19,
   appu: 24,
   seed: 3273,
 };
@@ -152,7 +148,7 @@ function LoadTileset(image, width, height, callback) {
 
 function renderMap(map, frames, callback) {
   map.imageURLs = [];
-  LoadTileset(sprites.tiles, 16, 16, tileset => {
+  LoadTileset(tilesetImage, 16, 16, tileset => {
     //TODO send frames immediately as generated
     for (let i = 0; i < frames; ++i)
       map.imageURLs.push(buildMapImageURL(map, tileset, i));
@@ -163,11 +159,13 @@ function renderMap(map, frames, callback) {
 function buildMapImageURL(map, tileset, frame) {
   let {width, height, appu, edges, polygons} = map;
 
+  // create pattern buffer
+  let pattern = new Canvas(tileset.width, tileset.height).getContext('2d');
+
   // create land
   let land = new Canvas(width * appu, height * appu).getContext('2d');
-  let grass = new Canvas.Image;
-  grass.src = sprites.grass;
-  land.fillStyle = land.createPattern(grass, 'repeat');
+  pattern.putImageData(tileset.tile(...GRASS[frame % GRASS.length]), 0, 0);
+  land.fillStyle = land.createPattern(pattern.canvas, 'repeat');
   polygons
     .filter(poly => poly.data.terrain >= 0)
     .forEach(poly => fillShape(land, 0, 0, poly.deepMap(c => c * appu), 1, 0));
