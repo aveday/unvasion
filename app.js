@@ -233,7 +233,7 @@ function buildMapImageURL(map, tileset, frame) {
 
   let waterTile = tileset.tile(...WATER[frame % WATER.length]);
   for (let x = 0; x < width * appu; x += waterTile.width)
-    for (let y = 0; y < width * appu; y += waterTile.height)
+    for (let y = 0; y < height * appu; y += waterTile.height)
       context.putImageData(waterTile, x, y);
 
   context.drawImage(land.canvas, 0, 0);
