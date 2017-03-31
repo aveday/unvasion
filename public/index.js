@@ -115,17 +115,19 @@ function drawMoves(targets, origin) {
       Math.atan2(target.y - origin.y, target.x - origin.x)));
 }
 
-function scaledDraw(context, image, position, center=true) {
-  context.drawImage(image,
-    position[0] * geoScale - (center ? mapScale*image.width / 2 : 0),
-    position[1] * geoScale - (center ? mapScale*image.height / 2 : 0),
-    image.width * mapScale,
-    image.height * mapScale);
+function scaledDraw(context, image, position, center=true, tile) {
+  tile = tile || [0, 0, image.width, image.height];
+  let size = tile.slice(2,4).map(c => c * mapScale);
+  let dest = position.map((c, i) => c * geoScale - (center ? size[i] / 2 : 0));
+  let source = [tile[0] * tile[2], tile[1] * tile[3], tile[2], tile[3]];
+  context.drawImage(image, ...source, ...dest, ...size);
 }
 
 function draw() {
 
   if (usePixelArt && mapImages.length) {
+    // TODO only composite on changes
+
     // draw map image
     context.imageSmoothingEnabled = false;
     let img = mapImages[frame % mapImages.length];
@@ -135,9 +137,11 @@ function draw() {
       unitPositions(region).forEach((pos, i) =>
         scaledDraw(context, i ? sprites.soldier : sprites.flagbearer, pos));
     // draw buildings
-    for (const region of regions.filter(r => r.building))
-        scaledDraw(context, sprites.town, [region.x, region.y]);
-
+    for (const region of regions.filter(r => r.building)) {
+      let townFrame = Math.floor(Math.max(region.building * 4, 1));
+      let tile = [townFrame, 0, 32, 32];
+      scaledDraw(context, sprites.town, [region.x, region.y], true, tile);
+    }
 
   } else {
     // water
