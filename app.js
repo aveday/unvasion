@@ -51,10 +51,10 @@ http.listen(port, () => console.log("Server started on port", port));
  ***************/
 
 var poissonVoronoi = {
-  width: 8,
-  height: 8,
+  width: 16,
+  height: 18,
   appu: 24,
-  seed: 3213,
+  seed: 3273,
 };
 
 /**************
@@ -68,6 +68,7 @@ function Island(mapDef) {
   // generate poisson disk distribution of sites
   let size = [map.width, map.height];
   map.sites = new Poisson(size, 1, 1, 30, rng).fill();
+  map.sites = map.sites.deepMap(c => c + 0.5);
 
   // generate site terrain
   map.zGen = simplexTerrain(rng);
@@ -77,6 +78,13 @@ function Island(mapDef) {
   let diagram = voronoi().size(size)(map.sites);
   map.polygons = diagram.polygons();
   map.edges = diagram.edges;
+
+  //sink border regions
+  map.edges
+    .filter(edge => !edge.left || !edge.right)
+    .forEach(edge => {
+      map.sites[(edge.left || edge.right).index].terrain = -1;
+    });
 
   // seperate corners too close together
   let minDist = 0.15;
@@ -226,6 +234,7 @@ function buildMapImageURL(map, tileset, frame) {
             ...[x, y].map((c, i) => Math.floor(c + edge.left[i] * appu)),
             ...getPixel(treeTile, x, y));
   });
+
   land.putImageData(landData, 0, 0);
 
   // create and composite map
