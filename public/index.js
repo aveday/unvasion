@@ -293,14 +293,26 @@ function getClickedRegion(e) {
 }
 
 canvas.addEventListener("mousedown", e => {
-  mouse.down = getClickedRegion(e);
+  switch(e.button) {
+    case 0:
+      mouse.down = getClickedRegion(e);
+      break;
+    case 2:
+      sendCommands();
+      break;
+  }
 });
 
 canvas.addEventListener("mouseup", e => {
-  mouse.up = getClickedRegion(e);
-  if (mouse.up && mouse.down)
-    addCommand(mouse.down, mouse.up);
-  mouse = {};
+  switch(e.button) {
+    case 0:
+      mouse.up = getClickedRegion(e);
+      mouse.up && mouse.down && addCommand(mouse.down, mouse.up);
+      mouse = {};
+      break;
+    case 2:
+      break;
+  }
 });
 
 socket.on("reload", () => window.location.reload()); 
