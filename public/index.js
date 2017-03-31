@@ -138,7 +138,7 @@ function draw() {
         scaledDraw(context, i ? sprites.soldier : sprites.flagbearer, pos));
     // draw buildings
     for (const region of regions.filter(r => r.building)) {
-      let townFrame = Math.floor(Math.max(region.building * 4, 1));
+      let townFrame = Math.floor(Math.min(region.building * 4, 4));
       let tile = [townFrame, 0, 32, 32];
       scaledDraw(context, sprites.town, [region.x, region.y], true, tile);
     }
