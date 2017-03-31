@@ -78,6 +78,21 @@ function Island(mapDef) {
   map.polygons = diagram.polygons();
   map.edges = diagram.edges;
 
+  // seperate corners too close together
+  let minDist = 0.15;
+  map.edges.forEach(edge => {
+    let dist = Math.sqrt(distSq(...edge[0], ...edge[1]));
+    if (dist < minDist) {
+      let diffence = edge[0].map((c, i) => c - edge[1][i]);
+      let adjustment = diffence.map(c => c * (minDist - dist) / dist);
+      edge[0][0] += adjustment[0]
+      edge[0][1] += adjustment[1]
+      edge[1][0] -= adjustment[0]
+      edge[1][1] -= adjustment[1]
+      edge.adjusted = true;
+    }
+  });
+
   return map;
 }
 
