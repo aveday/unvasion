@@ -198,6 +198,7 @@ function buildMapImageURL(map, tileset, frame) {
   // create pattern buffer
   let pattern = new Canvas(tileset.width, tileset.height).getContext('2d');
   land.fillStyle = land.createPattern(pattern.canvas, 'repeat');
+  land.strokeStyle = land.createPattern(pattern.canvas, 'repeat');
 
   // grass
   pattern.putImageData(tileset.frame(GRASS, frame), 0, 0);
@@ -589,6 +590,7 @@ function fillShape(context, x,y,points,s,t){
   }
   context.closePath();
   context.fill();
+  context.stroke();
 };
 
 function drawPixel(imageData, x, y, r, g, b, a) {
