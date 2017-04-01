@@ -121,18 +121,19 @@ function scaledDraw(context, image, position, center=true, tile) {
 }
 
 function draw() {
+  mapOffset = mapOffset.map(Math.floor);
   context.imageSmoothingEnabled = false;
   let size = [canvas.width, canvas.height];
 
   // draw water before translation
   if (usePixelArt && mapImages.length)
     context.drawImage(waterContext.canvas,
-      ...mapOffset.map(c => 32 - c * geoScale / mapScale % 32 + frame %2),
+      ...mapOffset.map(c => 32 - c / mapScale % 32 + frame %2),
       ...size.map(c => c / mapScale), 0, 0, ...size);
   else
     fillCanvas(canvas, "#3557a0");
 
-  context.translate(...mapOffset.map(c => c * geoScale));
+  context.translate(...mapOffset);
 
   if (usePixelArt && mapImages.length) {
     // TODO only composite on changes
@@ -183,7 +184,7 @@ function draw() {
   commands.forEach(drawMoves);
   context.globalAlpha = 1;
 
-  context.translate(...mapOffset.map(c => -c * geoScale));
+  context.translate(...mapOffset.map(c => -c));
 }
 
 function initCanvas() {
@@ -197,8 +198,8 @@ function initCanvas() {
   mapScale = Math.floor(Math.min(canvas.height / height, canvas.width / width));
   geoScale = mapScale * 24; //appu FIXME
 
-  mapOffset[0] = (canvas.width - width * mapScale) / 2 / geoScale;
-  mapOffset[1] = (canvas.height - height * mapScale) / 2 / geoScale;
+  mapOffset[0] = (canvas.width - width * mapScale) / 2;
+  mapOffset[1] = (canvas.height - height * mapScale) / 2;
 
   // set up water canvas
   waterContext.canvas.width = canvas.width + sprites.water.width;
@@ -288,7 +289,7 @@ function pointInRegion(region, x, y) {
 
 function getClickedRegion(e) {
   let canvasPoint = elementCoords(canvas, e.pageX, e.pageY);
-  let mapPoint = canvasPoint.map((c, i) => c / geoScale - mapOffset[i]);
+  let mapPoint = canvasPoint.map((c, i) => c / geoScale - mapOffset[i] / geoScale);
   let closest = closestPoint(...mapPoint, regions);
   //let region = pointInRegion(closest, x, y) ? closest : undefined; FIXME
   return closest;
@@ -324,19 +325,18 @@ canvas.addEventListener("mouseup", e => {
 
 canvas.addEventListener("mousemove", e => {
   if (mouse.panning) {
-    mapOffset[0] += e.movementX / geoScale;
-    mapOffset[1] += e.movementY / geoScale;
+    mapOffset[0] += e.movementX;
+    mapOffset[1] += e.movementY;
     draw();
   }
 });
 
 canvas.addEventListener("wheel", e => {
-  let cPos = elementCoords(canvas, e.pageX, e.pageY)
-  let gs1 = geoScale;
+  let ec = elementCoords(canvas, e.pageX, e.pageY)
+  let gs = geoScale;
   mapScale = Math.max(mapScale - e.deltaY / 100, 1);
   geoScale = mapScale * 24; //appu FIXME
-  mapOffset = mapOffset.map((c, i) => c + cPos[i] * (1/geoScale - 1/gs1));
-
+  mapOffset = mapOffset.map((c, i) => geoScale * (c/gs - ec[i]/gs) + ec[i]);
   draw();
 });
 
