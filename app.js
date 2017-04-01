@@ -19,10 +19,14 @@ const UNIT_COEFFICIENT = 2;
 const SPAWN_REQ = REGION_MAX / UNIT_COEFFICIENT;
 
 const tilesetImage = PNG.load('./public/tileset_water.png');
-const NORTHCOAST = [[1,  0], [1,  5]];
-const SOUTHCOAST = [[1,  2], [1,  7]];
-const WESTCOAST  = [[0,  1], [0,  6]];
-const EASTCOAST  = [[2,  1], [2,  6]];
+
+const WATER_GRASS = [
+  [[1,  0], [1,  5]],
+  [[1,  2], [1,  7]],
+  [[0,  1], [0,  6]],
+  [[2,  1], [2,  6]],
+];
+
 const WATER      = [[0, 21], [2, 21]];
 const TREES      = [[12,20], [13,20]];
 const GRASS      = [[ 1, 1]];
@@ -141,6 +145,7 @@ function LoadTileset(image, width, height, callback) {
     callback({
       width, height,
       frame: (set, number) => {
+        if (!set) return undefined;
         let [x, y, w = 1, h = 1] = set[number % set.length];
         return context.getImageData(x*width, y*height, w*width, h*height);
       }
@@ -158,17 +163,36 @@ function renderMap(map, frames, callback) {
   });
 }
 
+function getBorderType(edge, s1, s2) {
+  let slope = Math.abs((edge[0][1]-edge[1][1]) / (edge[0][0]-edge[1][0]));
+  let [N, S] = [s1, s2].sort((s1, s2) => s1[1] > s2[1]);
+  let [W, E] = [s1, s2].sort((s1, s2) => s1[0] > s2[0]);
+  [N, S, W, E] = [N, S, W, E].map(d => Math.floor(d.terrain));
+
+  let type = slope < 1
+    ? "H." + N + '.' + S
+    : "V." + W + '.' + E;
+
+  switch (type) {
+    case 'H.-1.0': return WATER_GRASS[0]; // North coast
+    case 'H.0.-1': return WATER_GRASS[1]; // South coast
+    case 'V.-1.0': return WATER_GRASS[2]; // West coast
+    case 'V.0.-1': return WATER_GRASS[3]; // East coast
+    default: return undefined;
+  }
+}
+
 function buildMapImageURL(map, tileset, frame) {
   let {width, height, appu, edges, polygons} = map;
 
-  // create pattern buffer
-  let pattern = new Canvas(tileset.width, tileset.height).getContext('2d');
-
   let land = new Canvas(width * appu, height * appu).getContext('2d');
 
-  //grass
-  pattern.putImageData(tileset.frame(GRASS, frame), 0, 0);
+  // create pattern buffer
+  let pattern = new Canvas(tileset.width, tileset.height).getContext('2d');
   land.fillStyle = land.createPattern(pattern.canvas, 'repeat');
+
+  // grass
+  pattern.putImageData(tileset.frame(GRASS, frame), 0, 0);
   polygons
     .filter(poly => poly.data.terrain >= 0)
     .forEach(poly => fillShape(land, 0, 0, poly.deepMap(c => c * appu), 1, 0));
@@ -189,12 +213,11 @@ function buildMapImageURL(map, tileset, frame) {
       bline(landData, 1, ...mEdge, 90, 128, 44, 225);
     
     let slope = Math.abs((edge[0][1]-edge[1][1]) / (edge[0][0]-edge[1][0]));
-    let coast = (s1.terrain < 0) !== (s2.terrain < 0);
+    let borderType = getBorderType(edge, s1, s2);
+    let tile = tileset.frame(borderType, frame);
 
-    // East-West coastline
-    if (coast && slope < 1) {
-      let north = [s1, s2].sort((s1, s2) => s1[1] > s2[1])[0].terrain < 0;
-      let tile = tileset.frame(north ? NORTHCOAST : SOUTHCOAST, frame);
+    // East-West borders
+    if (slope < 1 && tile) {
       blinePoints(...mEdge).forEach(point => {
         for (let y = 0; y < tile.height; ++y) {
           let dest = [point[0], point[1] + y - tile.height / 2];
@@ -206,10 +229,8 @@ function buildMapImageURL(map, tileset, frame) {
       });
     }
 
-    // North-South coastlines
-    if (coast && slope >= 1) {
-      let west = [s1, s2].sort((s1, s2) => s1[0] > s2[0])[0].terrain < 0;
-      let tile = tileset.frame(west ? WESTCOAST : EASTCOAST, frame);
+    // North-South borders
+    if (slope >= 1 && tile) {
       blinePoints(...mEdge).forEach(point => {
         for (let x = 0; x < tile.width; ++x) {
           let dest = [point[0] + x - tile.width / 2, point[1]];
