@@ -294,9 +294,9 @@ function pointInRegion(region, x, y) {
 }
 
 function getClickedRegion(e) {
-  let [canvasX, canvasY] = elementCoords(canvas, e.pageX, e.pageY);
-  let [x, y] = [canvasX / geoScale, canvasY / geoScale];
-  let closest = closestPoint(x, y, regions);
+  let canvasPoint = elementCoords(canvas, e.pageX, e.pageY);
+  let mapPoint = canvasPoint.map((c, i) => c / geoScale - mapOffset[i]);
+  let closest = closestPoint(...mapPoint, regions);
   //let region = pointInRegion(closest, x, y) ? closest : undefined; FIXME
   return closest;
 }
