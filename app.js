@@ -20,16 +20,28 @@ const SPAWN_REQ = REGION_MAX / UNIT_COEFFICIENT;
 
 const tilesetImage = PNG.load('./public/tileset_water.png');
 
-const WATER_GRASS = [
-  [[1,  0], [1,  5]],
-  [[1,  2], [1,  7]],
-  [[0,  1], [0,  6]],
-  [[2,  1], [2,  6]],
-];
+const terrainTiles = {
+    // water to grass
+    'H.-1.0': [[1,  0], [1,  5]],
+    'H.0.-1': [[1,  2], [1,  7]],
+    'V.-1.0': [[0,  1], [0,  6]],
+    'V.0.-1': [[2,  1], [2,  6]],
+    // water to sand
+    'H.-1.1': [[4,  0], [4,  5]],
+    'H.1.-1': [[4,  2], [4,  7]],
+    'V.-1.1': [[3,  1], [3,  6]],
+    'V.1.-1': [[5,  1], [5,  6]],
+    // grass to sand
+    'H.0.1': [[10, 0]],
+    'H.1.0': [[10, 2]],
+    'V.0.1': [[ 9, 1]],
+    'V.1.0': [[11, 1]],
+}
 
 const WATER      = [[0, 21], [2, 21]];
 const TREES      = [[12,20], [13,20]];
 const GRASS      = [[ 1, 1]];
+const SAND       = [[ 4, 1]];
 
 var autoreload = true;
 var port  = 4000;
@@ -173,13 +185,9 @@ function getBorderType(edge, s1, s2) {
     ? "H." + N + '.' + S
     : "V." + W + '.' + E;
 
-  switch (type) {
-    case 'H.-1.0': return WATER_GRASS[0]; // North coast
-    case 'H.0.-1': return WATER_GRASS[1]; // South coast
-    case 'V.-1.0': return WATER_GRASS[2]; // West coast
-    case 'V.0.-1': return WATER_GRASS[3]; // East coast
-    default: return undefined;
-  }
+  return terrainTiles.hasOwnProperty(type)
+    ? terrainTiles[type]
+    : undefined;
 }
 
 function buildMapImageURL(map, tileset, frame) {
@@ -197,6 +205,12 @@ function buildMapImageURL(map, tileset, frame) {
     .filter(poly => poly.data.terrain >= 0)
     .forEach(poly => fillShape(land, 0, 0, poly.deepMap(c => c * appu), 1, 0));
 
+  // sand
+  pattern.putImageData(tileset.frame(SAND, frame), 0, 0);
+  polygons
+    .filter(poly => poly.data.terrain >= 1)
+    .forEach(poly => fillShape(land, 0, 0, poly.deepMap(c => c * appu), 1, 0));
+
   // construct region borders
   let landData = land.getImageData(0, 0, land.canvas.width, land.canvas.height);
 
@@ -209,9 +223,6 @@ function buildMapImageURL(map, tileset, frame) {
     let mEdge = edge.deepMap(c => c * appu);
     let mQuad = [s1, edge[0], s2, edge[1]].deepMap(c => c * appu);
 
-    if (s1.terrain >= 0 && s2.terrain >= 0)
-      bline(landData, 1, ...mEdge, 90, 128, 44, 225);
-    
     let slope = Math.abs((edge[0][1]-edge[1][1]) / (edge[0][0]-edge[1][0]));
     let borderType = getBorderType(edge, s1, s2);
     let tile = tileset.frame(borderType, frame);
