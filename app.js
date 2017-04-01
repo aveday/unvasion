@@ -140,8 +140,10 @@ function LoadTileset(image, width, height, callback) {
     context.putImageData(imageData, 0, 0);
     callback({
       width, height,
-      tile: (x, y, w = 1, h = 1) =>
-        context.getImageData(x*width, y*height, w*width, h*height),
+      frame: (set, number) => {
+        let [x, y, w = 1, h = 1] = set[number % set.length];
+        return context.getImageData(x*width, y*height, w*width, h*height);
+      }
     });
   });
 }
@@ -162,9 +164,10 @@ function buildMapImageURL(map, tileset, frame) {
   // create pattern buffer
   let pattern = new Canvas(tileset.width, tileset.height).getContext('2d');
 
-  // create land
   let land = new Canvas(width * appu, height * appu).getContext('2d');
-  pattern.putImageData(tileset.tile(...GRASS[frame % GRASS.length]), 0, 0);
+
+  //grass
+  pattern.putImageData(tileset.frame(GRASS, frame), 0, 0);
   land.fillStyle = land.createPattern(pattern.canvas, 'repeat');
   polygons
     .filter(poly => poly.data.terrain >= 0)
@@ -190,10 +193,8 @@ function buildMapImageURL(map, tileset, frame) {
 
     // East-West coastline
     if (coast && slope < 1) {
-      let tile = [s1, s2].sort((s1, s2) => s1[1] > s2[1])[0].terrain < 0
-        ? tileset.tile(...NORTHCOAST[frame % NORTHCOAST.length])
-        : tileset.tile(...SOUTHCOAST[frame % SOUTHCOAST.length]);
-
+      let north = [s1, s2].sort((s1, s2) => s1[1] > s2[1])[0].terrain < 0;
+      let tile = tileset.frame(north ? NORTHCOAST : SOUTHCOAST, frame);
       blinePoints(...mEdge).forEach(point => {
         for (let y = 0; y < tile.height; ++y) {
           let dest = [point[0], point[1] + y - tile.height / 2];
@@ -207,9 +208,8 @@ function buildMapImageURL(map, tileset, frame) {
 
     // North-South coastlines
     if (coast && slope >= 1) {
-      let tile = [s1, s2].sort((s1, s2) => s1[0] > s2[0])[0].terrain < 0
-        ? tileset.tile(...WESTCOAST[frame % WESTCOAST.length])
-        : tileset.tile(...EASTCOAST[frame % EASTCOAST.length]);
+      let west = [s1, s2].sort((s1, s2) => s1[0] > s2[0])[0].terrain < 0;
+      let tile = tileset.frame(west ? WESTCOAST : EASTCOAST, frame);
       blinePoints(...mEdge).forEach(point => {
         for (let x = 0; x < tile.width; ++x) {
           let dest = [point[0] + x - tile.width / 2, point[1]];
@@ -223,7 +223,7 @@ function buildMapImageURL(map, tileset, frame) {
   });
 
   // draw trees
-  let treeTile = tileset.tile(...TREES[frame % TREES.length]);
+  let treeTile = tileset.frame(TREES, frame);
   edges.filter(edge => edge.left).forEach(edge => {
     if (edge.left.index % 4 === 0 && map.sites[edge.left.index].terrain >= 0)
       for (let x=0; x<treeTile.width; ++x)
@@ -238,7 +238,7 @@ function buildMapImageURL(map, tileset, frame) {
   // create and composite map
   let context = new Canvas(width * appu, height * appu).getContext('2d');
 
-  let waterTile = tileset.tile(...WATER[frame % WATER.length]);
+  let waterTile = tileset.frame(WATER, frame);
   for (let x = 0; x < width * appu; x += waterTile.width)
     for (let y = 0; y < height * appu; y += waterTile.height)
       context.putImageData(waterTile, x, y);
