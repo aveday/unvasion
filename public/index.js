@@ -34,6 +34,7 @@ let commands = new Map();
 let mouse = {};
 
 let mapScale, geoScale;
+let mapOffset = [0, 0];
 let mapImages = [];
 let frame = 0;
 let frameInterval;
@@ -318,6 +319,20 @@ canvas.addEventListener("mouseup", e => {
     case 2:
       break;
   }
+});
+
+canvas.addEventListener("wheel", e => {
+  context.translate(...mapOffset.map(c => -c * geoScale));
+  fillCanvas(canvas, "#101010");
+
+  let cPos = elementCoords(canvas, e.pageX, e.pageY)
+  let gs1 = geoScale;
+  mapScale = Math.max(mapScale - e.deltaY / 100, 1);
+  geoScale = mapScale * 24; //appu FIXME
+  mapOffset = mapOffset.map((c, i) => c + cPos[i] * (1/geoScale - 1/gs1));
+
+  context.translate(...mapOffset.map(c => c * geoScale));
+  draw();
 });
 
 socket.on("reload", () => window.location.reload()); 
