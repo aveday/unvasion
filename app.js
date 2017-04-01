@@ -267,17 +267,7 @@ function buildMapImageURL(map, tileset, frame) {
   });
 
   land.putImageData(landData, 0, 0);
-
-  // create and composite map
-  let context = new Canvas(width * appu, height * appu).getContext('2d');
-
-  let waterTile = tileset.frame(WATER, frame);
-  for (let x = 0; x < width * appu; x += waterTile.width)
-    for (let y = 0; y < height * appu; y += waterTile.height)
-      context.putImageData(waterTile, x, y);
-
-  context.drawImage(land.canvas, 0, 0);
-  return context.canvas.toDataURL();
+  return land.canvas.toDataURL();
 }
 
 /************

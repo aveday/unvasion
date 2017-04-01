@@ -14,6 +14,7 @@ const sprites = {
   soldier: document.getElementById("soldier"),
   flagbearer: document.getElementById("flagbearer"),
   town: document.getElementById("town"),
+  water: document.getElementById("water"),
 }
 
 const BUILDING_PARTS = 7;
@@ -27,6 +28,8 @@ let blines = true;
 let playerColors = ["blue", "red"];
 
 let context = canvas.getContext("2d");
+let waterContext = document.createElement("canvas").getContext("2d");
+let waterPattern;
 let socket = io();
 
 let player = 0;
@@ -125,14 +128,23 @@ function scaledDraw(context, image, position, center=true, tile) {
 }
 
 function draw() {
-  fillCanvas(canvas, "#101010");
+  context.imageSmoothingEnabled = false;
+  let size = [canvas.width, canvas.height];
+
+  // draw water before translation
+  if (usePixelArt && mapImages.length)
+    context.drawImage(waterContext.canvas,
+      ...mapOffset.map(c => 32 - c * geoScale / mapScale % 32 + frame %2),
+      ...size.map(c => c / mapScale), 0, 0, ...size);
+  else
+    fillCanvas(canvas, "#3557a0");
+
   context.translate(...mapOffset.map(c => c * geoScale));
 
   if (usePixelArt && mapImages.length) {
     // TODO only composite on changes
 
     // draw map image
-    context.imageSmoothingEnabled = false;
     let img = mapImages[frame % mapImages.length];
     scaledDraw(context, img, [0, 0], false);
     // draw unit sprites
@@ -147,8 +159,6 @@ function draw() {
     }
 
   } else {
-    // water
-    fillCanvas(canvas, "#3557a0");
 
     // regions
     context.globalAlpha = 1;
@@ -200,6 +210,12 @@ function initCanvas() {
 
   //TODO this automatically by putting both elements in a div
   panel.progressBorder.style.width = canvas.width + "px";
+
+  // set up water canvas
+  waterContext.canvas.width = canvas.width + sprites.water.width;
+  waterContext.canvas.height = canvas.height + sprites.water.height;
+  waterPattern = waterContext.createPattern(sprites.water, "repeat");
+  fillCanvas(waterContext.canvas, waterPattern);
 
   clearInterval(frameInterval);
   frameInterval = setInterval(() => {++frame; draw()}, 1000);
