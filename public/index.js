@@ -21,10 +21,13 @@ let blines = true;
 let playerColors = ["blue", "red"];
 
 let context = canvas.getContext("2d");
+let mapCanvas = document.createElement("canvas");
+let mapContext = mapCanvas.getContext("2d");
+
 let waterContext = document.createElement("canvas").getContext("2d");
 let waterPattern;
-let socket = io();
 
+let socket = io();
 let player = 0;
 let commands = new Map();
 let mouse = {};
@@ -112,45 +115,45 @@ function drawMoves(targets, origin) {
       Math.atan2(target.y - origin.y, target.x - origin.x)));
 }
 
-function scaledDraw(context, image, position, center=true, tile) {
+function tileDraw(context, image, position, center=true, tile) {
   tile = tile || [0, 0, image.width, image.height];
-  let size = tile.slice(2,4).map(c => c * mapScale);
-  let dest = position.map((c, i) => c * geoScale - (center ? size[i] / 2 : 0));
-  dest = dest.map(c => c - c % mapScale);
+  let size = tile.slice(2,4);
+  let dest = position.map((c, i) => c * ppu - (center ? size[i] / 2 : 0));
+  dest = dest.map(Math.floor);
   let source = [tile[0] * tile[2], tile[1] * tile[3], tile[2], tile[3]];
   context.drawImage(image, ...source, ...dest, ...size);
 }
 
 function draw() {
-  mapOffset = mapOffset.map(Math.floor);
   context.imageSmoothingEnabled = false;
-  let size = [canvas.width, canvas.height];
+  let drawOffset = mapOffset.map(Math.floor);
+  let mapCanvasSize = [mapCanvas.width, mapCanvas.height];
 
   // draw water before translation
   if (usePixelArt && mapImages.length)
-    context.drawImage(waterContext.canvas,
-      ...mapOffset.map(c => 32 - c / mapScale % 32 + frame %2),
-      ...size.map(c => c / mapScale), 0, 0, ...size);
+    mapContext.drawImage(waterContext.canvas,
+      ...drawOffset.map(c => 32 - c % 32 + frame %2),
+      ...mapCanvasSize, 0, 0, ...mapCanvasSize);
   else
     fillCanvas(canvas, "#3557a0");
 
-  context.translate(...mapOffset);
+  mapContext.translate(...drawOffset);
 
   if (usePixelArt && mapImages.length) {
     // TODO only composite on changes
 
     // draw map image
     let img = mapImages[frame % mapImages.length];
-    scaledDraw(context, img, [0, 0], false);
+    mapContext.drawImage(img, 0, 0);
     // draw unit sprites
     for (const region of regions.filter(r => r.units.length))
       unitPositions(region).forEach((pos, i) =>
-        scaledDraw(context, i ? sprites.soldier : sprites.flagbearer, pos));
+        tileDraw(mapContext, i ? sprites.soldier : sprites.flagbearer, pos));
     // draw buildings
     for (const region of regions.filter(r => r.building)) {
       let townFrame = Math.floor(Math.min(region.building * 4, 4));
       let tile = [townFrame, 0, 32, 32];
-      scaledDraw(context, sprites.town, [region.x, region.y], true, tile);
+      tileDraw(mapContext, sprites.town, [region.x, region.y], true, tile);
     }
 
   } else {
@@ -185,9 +188,13 @@ function draw() {
   commands.forEach(drawMoves);
   context.globalAlpha = 1;
 
-  context.translate(...mapOffset.map(c => -c));
+  mapContext.translate(...drawOffset.map(c => -c));
+  context.drawImage(
+    mapContext.canvas, 0, 0,
+    mapCanvas.width * mapScale, mapCanvas.height * mapScale);
 }
 
+let ppu;
 function initCanvas() {
   if (!regions) return;
   // find largest possible regionsize while still fitting entire map
@@ -197,14 +204,20 @@ function initCanvas() {
   let {width, height} = mapImages[0];
 
   mapScale = Math.floor(Math.min(canvas.height / height, canvas.width / width));
-  geoScale = mapScale * 24; //appu FIXME
+  ppu = 24; //appu FIXME
+  geoScale = mapScale * ppu ;
 
-  mapOffset[0] = (canvas.width - width * mapScale) / 2;
-  mapOffset[1] = (canvas.height - height * mapScale) / 2;
+  mapCanvas.width = canvas.width / mapScale;
+  mapCanvas.height = canvas.height / mapScale;
+  console.log(mapCanvas.width, mapCanvas.height);
+
+  mapOffset[0] = (mapCanvas.width - width) / 2;
+  mapOffset[1] = (mapCanvas.height - height) / 2;
 
   // set up water canvas
   waterContext.canvas.width = canvas.width + sprites.water.width;
   waterContext.canvas.height = canvas.height + sprites.water.height;
+
   waterPattern = waterContext.createPattern(sprites.water, "repeat");
   fillCanvas(waterContext.canvas, waterPattern);
 
@@ -326,18 +339,23 @@ canvas.addEventListener("mouseup", e => {
 
 canvas.addEventListener("mousemove", e => {
   if (mouse.panning) {
-    mapOffset[0] += e.movementX;
-    mapOffset[1] += e.movementY;
+    mapOffset[0] += e.movementX / mapScale;
+    mapOffset[1] += e.movementY / mapScale;
     draw();
   }
 });
 
 canvas.addEventListener("wheel", e => {
-  let ec = elementCoords(canvas, e.pageX, e.pageY)
-  let gs = geoScale;
+  let ec = elementCoords(canvas, e.pageX, e.pageY);
+  let ms = mapScale;
+
   mapScale = Math.max(mapScale - e.deltaY / 100, 1);
-  geoScale = mapScale * 24; //appu FIXME
-  mapOffset = mapOffset.map((c, i) => geoScale * (c/gs - ec[i]/gs) + ec[i]);
+  geoScale = mapScale * 24; //appu FIXME          
+
+  mapCanvas.width = Math.ceil(canvas.width / mapScale);
+  mapCanvas.height = Math.ceil(canvas.height / mapScale);
+
+  mapOffset = mapOffset.map((c, i) => c + ec[i]/mapScale - ec[i]/ms);
   draw();
 });
 
