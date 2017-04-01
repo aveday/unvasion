@@ -303,6 +303,9 @@ canvas.addEventListener("mousedown", e => {
     case 0:
       mouse.down = getClickedRegion(e);
       break;
+    case 1:
+      mouse.panning = true;
+      break;
     case 2:
       sendCommands();
       break;
@@ -316,8 +319,21 @@ canvas.addEventListener("mouseup", e => {
       mouse.up && mouse.down && addCommand(mouse.down, mouse.up);
       mouse = {};
       break;
+    case 1:
+      mouse.panning = false;
     case 2:
       break;
+  }
+});
+
+canvas.addEventListener("mousemove", e => {
+  if (mouse.panning) {
+    context.translate(...mapOffset.map(c => -c * geoScale));
+    mapOffset[0] += e.movementX / geoScale;
+    mapOffset[1] += e.movementY / geoScale;
+    fillCanvas(canvas, "#101010");
+    context.translate(...mapOffset.map(c => c * geoScale));
+    draw();
   }
 });
 
