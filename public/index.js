@@ -3,13 +3,6 @@
 window.addEventListener("resize", initCanvas, false);
 let canvas = document.getElementById("canvas");
 
-let panel = {
-  header: document.getElementsByTagName("header")[0],
-  progressBar: document.getElementById("progressBar"),
-  progressBorder: document.getElementById("progressBorder"),
-  playerCount: document.getElementById("playerCount"),
-};
-
 const sprites = {
   soldier: document.getElementById("soldier"),
   flagbearer: document.getElementById("flagbearer"),
@@ -196,20 +189,16 @@ function draw() {
 function initCanvas() {
   if (!regions) return;
   // find largest possible regionsize while still fitting entire map
-  let maxHeight = window.innerHeight * 0.95 - panel.header.offsetHeight;
-  let maxWidth = window.innerWidth * 0.95;
+  canvas.height = window.innerHeight;
+  canvas.width = window.innerWidth;
 
   let {width, height} = mapImages[0];
 
-  mapScale = Math.floor(Math.min(maxHeight / height, maxWidth / width));
+  mapScale = Math.floor(Math.min(canvas.height / height, canvas.width / width));
   geoScale = mapScale * 24; //appu FIXME
 
-  // restrict canvas size
-  canvas.width = width * mapScale;
-  canvas.height = height * mapScale;
-
-  //TODO this automatically by putting both elements in a div
-  panel.progressBorder.style.width = canvas.width + "px";
+  mapOffset[0] = (canvas.width - width * mapScale) / 2 / geoScale;
+  mapOffset[1] = (canvas.height - height * mapScale) / 2 / geoScale;
 
   // set up water canvas
   waterContext.canvas.width = canvas.width + sprites.water.width;
@@ -271,7 +260,6 @@ function loadState(state) {
   unitSpots = state.spots; //FIXME this is static, shouldn't be updated
   players = state.players;
   regions = state.regions;
-  panel.playerCount.innerHTML = players.length;
   draw();
 }
 
@@ -284,22 +272,11 @@ function loadMap(imageURLs) {
   mapImages[0].onload = initCanvas;
 }
 
-progressBar.start = function(turnTime) {
-  this.style.width = "0%";
-  this.style.transition = "width 0s";
-  this.offsetLeft; // hack to split up transition properties
-  this.style.transition = "width " + turnTime + "ms linear";
-  this.style.width = "100%";
-};
-
 function startTurn(turnTime) {
   // place construction commands on adjacent unfinished buildings
   regions.filter(t => t.building && t.building < 1 && !t.units.length)
       .filter(t => t.connected.some(id => regions[id].player === player))
       .forEach(t => addCommand(t, t));
-
-  if (turnTime)
-    progressBar.start(turnTime);
 }
 
 function pointInRegion(region, x, y) {

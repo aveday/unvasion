@@ -22,6 +22,17 @@ html, body {
   display: block;
 }
 
+.panel {
+  background: rgba(0, 0, 0, 0);
+  position: absolute;
+  margin-left: auto;
+  left: 0; 
+  right: 0; 
+  margin-left: auto; 
+  margin-right: auto; 
+  width: 100%;
+}
+
 canvas {
   margin-left: auto;
   margin-right: auto;
@@ -35,15 +46,3 @@ canvas {
   -webkit-user-drag: none;
 }
 
-#progressBar {
-  width: 0px;
-  height: 10px;
-  background-color: yellow;
-}
-
-#progressBorder {
-  margin-left: auto;
-  margin-right: auto;
-  background-color: grey;
-
-}

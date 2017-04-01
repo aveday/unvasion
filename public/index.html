@@ -4,16 +4,9 @@
 <script src="/socket.io/socket.io.js"></script>
 <link rel="stylesheet" href="style.css">
 
-<header>
-  <p>
-    Players: <span id="playerCount">0</span> &emsp;
-    <button type="button" onclick="socket.emit('ready')"> start game</button>
-    <button type="button" onclick="usePixelArt = !usePixelArt; draw()"> pixels</button>
-  </p>
-</header>
-
-<div id="progressBorder">
-  <div id="progressBar"></div>
+<div class="panel">
+<button onclick="socket.emit('ready')"> Start Game </button>
+<button onclick="usePixelArt = !usePixelArt; draw()"> Toggle graphics</button>
 </div>
 
 <canvas oncontextmenu="return false" id="canvas">
