@@ -116,6 +116,7 @@ function scaledDraw(context, image, position, center=true, tile) {
   tile = tile || [0, 0, image.width, image.height];
   let size = tile.slice(2,4).map(c => c * mapScale);
   let dest = position.map((c, i) => c * geoScale - (center ? size[i] / 2 : 0));
+  dest = dest.map(c => c - c % mapScale);
   let source = [tile[0] * tile[2], tile[1] * tile[3], tile[2], tile[3]];
   context.drawImage(image, ...source, ...dest, ...size);
 }
