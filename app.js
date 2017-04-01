@@ -326,7 +326,6 @@ function Game(mapDef, turnTime) {
 function startTurn(game) {
   console.log(chalk.green("\nStarting turn", game.turnCount));
   io.emit("startTurn", game.turnTime);
-  game.regions.forEach(region => setGroups(region, [region], [false]));
   game.waitingOn = new Set(game.players);
   if (game.turnTime)
     gameTimeouts.set(game, setTimeout(endTurn, game.turnTime, game));
@@ -338,6 +337,10 @@ function endTurn(game) {
 }
 
 function loadCommands(game, player, commandIds) {
+  // set default commands
+  game.regions
+    .filter(region => region.player === player)
+    .forEach(region => setGroups(region, [region], [false]));
   // load the commands from the player messages
   let nCommands = commandIds.reduce((a, v) => a + v[1].length, 0);
   console.log("Player %s sent %s commands", player, nCommands);
