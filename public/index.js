@@ -40,7 +40,7 @@ let frameInterval;
 let regions, players, unitSpots;
 
 function corner(region) {
-  return [(region.x - 0.5) * scale, (region.y - 0.5) * scale];
+  return region.position.map(c => (c - 0.5) * scale);
 }
 
 function playerColor(player) {
@@ -82,7 +82,7 @@ function unitPositions(region) {
   //TODO calculate and parameterise unit spread
   return region.units.map((unit, i) => {
     let spot = unitSpots[i].map(c => c * (1 + 4/region.units.length));
-    return [region.x + spot[0], region.y + spot[1]]
+    return region.position.map((c, i) => c + spot[i]);
   });
 }
 
@@ -102,16 +102,15 @@ function drawUnits(region, draw) {
 }
 
 function drawMoves(targets, origin) {
-  if (origin.player !== player)
-    return;
+  if (origin.player !== player) return;
   //TODO fill red for attacks
-  targets.forEach(target =>
-    context.fillShape(
-      scale * (target.x + origin.x) / 2,
-      scale * (target.y + origin.y) / 2,
-      target === origin ? shapes.square : shapes.arrow,
-      scale / 8 / Math.sqrt(targets.length),
-      Math.atan2(target.y - origin.y, target.x - origin.x)));
+  targets.forEach(t => {
+    let dest = t.position.map((c, i) => (c+origin.position[i])/2 * scale);
+    let shape = t === origin ? shapes.square : shapes.arrow;
+    let size = scale / 8 / Math.sqrt(targets.length);
+    let a = Math.atan2(...[1,0].map(i => t.position[i] - origin.position[i]));
+    context.fillShape(...dest, shape, size, a);
+  });
 }
 
 function tileDraw(context, image, position, center=true, tile) {
@@ -153,7 +152,7 @@ function draw() {
     for (const region of regions.filter(r => r.building)) {
       let townFrame = Math.floor(Math.min(region.building * 4, 4));
       let tile = [townFrame, 0, 32, 32];
-      tileDraw(mapContext, sprites.town, [region.x, region.y], true, tile);
+      tileDraw(mapContext, sprites.town, region.position, true, tile);
     }
 
     mapContext.translate(...mapOffset.map(c => -c));
@@ -303,17 +302,16 @@ function startTurn(turnTime) {
 
 function pointInRegion(region, x, y) {
   context.beginPath()
-  region.polygon.forEach(point => context.lineTo(...point));
+  context.moveTo(...region.polygon[0]);
+  region.polygon.slice(1).forEach(point => context.lineTo(...point));
   context.closePath();
-  return context.isPointInPath(x / scale, y / scale);
+  return context.isPointInPath(x, y);
 }
 
 function getClickedRegion(e) {
   let canvasPoint = elementCoords(canvas, e.pageX, e.pageY);
   let mapPoint = canvasPoint.map((c, i) => c / scale - offset[i]);
-  let closest = closestPoint(...mapPoint, regions);
-  //let region = pointInRegion(closest, x, y) ? closest : undefined; FIXME
-  return closest;
+  return regions.find(region => pointInRegion(region, ...mapPoint));
 }
 
 canvas.addEventListener("mousedown", e => {

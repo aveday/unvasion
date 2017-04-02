@@ -6,10 +6,10 @@ function distSq(x1, y1, x2, y2) {
   return dx*dx + dy*dy;
 }
 
-function closestPoint(x, y, points) {
+function closestPoint(point, points) {
   let minDist = Infinity;
   return points.reduce((a, v) => {
-    let dist = distSq(x, y, v.x, v.y);
+    let dist = distSq(...point, ...v);
     minDist = Math.min(dist, minDist);
     return dist === minDist ? v : a;
   }, points[0]);

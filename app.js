@@ -117,9 +117,10 @@ function Island(mapDef) {
 }
 
 function Region(polygon, id) {
-  let [x, y] = polygon.data;
   return {
-    x, y, polygon, id,
+    id,
+    polygon: Array.from(polygon),
+    position: Array.from(polygon.data),
     terrain: polygon.data.terrain,
     units: [],
     connected: [],
