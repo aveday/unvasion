@@ -122,11 +122,14 @@ function Region(polygon, id) {
     polygon: Array.from(polygon),
     position: Array.from(polygon.data),
     terrain: polygon.data.terrain,
-    units: [],
     connected: [],
+
+    units: [],
+    building: 0,
+    player: null,
+
     attackedBy: [],
     inbound: [],
-    building: 0,
   };
 }
 
@@ -345,7 +348,7 @@ function loadCommands(game, player, commandIds) {
 
   // determine which commands are for construction
   let planIds = commandIds
-    .filter(command => game.regions[command[0]].player === undefined)
+    .filter(command => game.regions[command[0]].player === null)
     .map(commandId => commandId[0]);
 
   commandIds.forEach(command => {
@@ -451,7 +454,7 @@ function calculateFatalities(region) {
   let deaths = evenChunks(Array(Math.ceil(damage)), region.groups.length);
   region.groups.forEach((group, i) => group.splice(0, deaths[i].length));
   if (region.groups.every(group => group.length === 0))
-    region.player = undefined;
+    region.player = null;
   region.attackedBy = [];
 }
 
@@ -472,7 +475,7 @@ function receiveUnits(region) {
   let victor = groups.reduce((v, g) => g.length > v.length ? g : v, []);
   let deaths = groups.map(g => g.length).sort((a, b) => b - a)[1] || 0;
   region.units = Array.from(victor.slice(deaths));
-  region.player = region.units.length ? victor.player : undefined;
+  region.player = region.units.length ? victor.player : null;
 }
 
 /*****************
@@ -553,7 +556,7 @@ function deletePlayerUnits(region, player) {
     region.forEach(r => deletePlayerUnits(r, player));
   } else if (region.player === player) {
     region.units = [];
-    region.player = undefined;
+    region.player = null;
   }
 }
 

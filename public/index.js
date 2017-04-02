@@ -69,7 +69,7 @@ function drawBuilding(region) {
 
 function drawPlans(targets, origin) {
   targets.forEach(target => {
-    if (target === origin && origin.player === undefined) {
+    if (target === origin && origin.player === null) {
       let gap = GAP_SIZE * scale / 2;
       let size = scale - gap * 2;
       let [x, y] = corner(origin).map(c => c + gap);
@@ -235,7 +235,7 @@ function initMapCanvas() {
 function addCommand(origin, target) {
   // check the command is between connected regions
   if ( ![origin.id, ...origin.connected].includes(target.id)
-    || ![player, undefined].includes(origin.player)
+    || ![player, null].includes(origin.player)
     || target.terrain < 0 )
     return;
 
@@ -248,7 +248,7 @@ function addCommand(origin, target) {
       delete commands.delete(origin);
   }
   // building commands
-  else if (origin.player === undefined) {
+  else if (origin.player === null) {
     // only allow plans adjacent to friendly regions
     if (origin.connected.some(id => regions[id].player === player))
       targets.push(target);
