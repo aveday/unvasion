@@ -31,7 +31,7 @@ let player = 0;
 let commands = new Map();
 let mouse = {};
 
-let mapScale, geoScale, ppu;
+let scale, ppu;
 let offset = [0, 0];
 let mapImages = [];
 let frame = 0;
@@ -40,7 +40,7 @@ let frameInterval;
 let regions, players, unitSpots;
 
 function corner(region) {
-  return [(region.x - 0.5) * geoScale, (region.y - 0.5) * geoScale];
+  return [(region.x - 0.5) * scale, (region.y - 0.5) * scale];
 }
 
 function playerColor(player) {
@@ -49,13 +49,13 @@ function playerColor(player) {
 }
 
 function drawRegion(region) {
-  context.fillShape(0, 0, region.points, geoScale, 0);
+  context.fillShape(0, 0, region.points, scale, 0);
   context.stroke();
 }
 
 function drawBuilding(region) {
-  let gap = GAP_SIZE * geoScale;
-  let size = geoScale - gap * 2;
+  let gap = GAP_SIZE * scale;
+  let size = scale - gap * 2;
   let part = size / BUILDING_PARTS;
   let [x, y] = corner(region).map(c => c + gap);
 
@@ -70,8 +70,8 @@ function drawBuilding(region) {
 function drawPlans(targets, origin) {
   targets.forEach(target => {
     if (target === origin && origin.player === undefined) {
-      let gap = GAP_SIZE * geoScale / 2;
-      let size = geoScale - gap * 2;
+      let gap = GAP_SIZE * scale / 2;
+      let size = scale - gap * 2;
       let [x, y] = corner(origin).map(c => c + gap);
       context.strokeRect(x, y, size, size);
     }
@@ -92,9 +92,9 @@ function drawUnits(region, draw) {
   context.beginPath();
 
   for (const pos of unitPositions(region)) {
-    let screenPos = pos.map(c => c*geoScale);
+    let screenPos = pos.map(c => c * scale);
     context.moveTo(...screenPos);
-    context.arc( ...screenPos, UNIT_SIZE * geoScale, 0, 2 * Math.PI);
+    context.arc( ...screenPos, UNIT_SIZE * scale, 0, 2 * Math.PI);
   }
 
   context.closePath();
@@ -107,10 +107,10 @@ function drawMoves(targets, origin) {
   //TODO fill red for attacks
   targets.forEach(target =>
     context.fillShape(
-      geoScale * (target.x + origin.x) / 2,
-      geoScale * (target.y + origin.y) / 2,
+      scale * (target.x + origin.x) / 2,
+      scale * (target.y + origin.y) / 2,
       target === origin ? shapes.square : shapes.arrow,
-      geoScale / 8 / Math.sqrt(targets.length),
+      scale / 8 / Math.sqrt(targets.length),
       Math.atan2(target.y - origin.y, target.x - origin.x)));
 }
 
@@ -125,8 +125,9 @@ function tileDraw(context, image, position, center=true, tile) {
 
 function draw() {
   context.imageSmoothingEnabled = false;
+  let geoOffset = offset.map(c => Math.floor(c * scale));
   let mapOffset = offset.map(c => Math.floor(c * ppu));
-  let geoOffset = offset.map(c => Math.floor(c * geoScale));
+  let mapZoom = scale / ppu;
   let mapCanvasSize = [mapCanvas.width, mapCanvas.height];
 
   // draw water before translation
@@ -159,8 +160,8 @@ function draw() {
     if (usePixelArt)
       context.drawImage(
         mapContext.canvas,
-        ...offset.map(c => c * geoScale % mapScale - mapScale),
-        mapCanvas.width * mapScale, mapCanvas.height * mapScale);
+        ...offset.map(c => c * scale % mapZoom - mapZoom),
+        ...mapCanvasSize.map(c => c * mapZoom));
 
   } else {
     context.translate(...geoOffset);
@@ -187,7 +188,7 @@ function draw() {
   // TODO add pixmap version, move to geo draw block above
   context.translate(...geoOffset);
   // building commands
-  context.setLineDash([geoScale*DASH_SIZE, geoScale*DASH_SIZE]);
+  context.setLineDash([scale*DASH_SIZE, scale*DASH_SIZE]);
   context.strokeStyle = "yellow";
   commands.forEach(drawPlans);
   context.setLineDash([]);
@@ -209,7 +210,7 @@ function toggleGraphics() {
 function initCanvas() {
   canvas.height = window.innerHeight;
   canvas.width = window.innerWidth;
-  geoScale = 48; //FIXME
+  scale = 48; //FIXME
   usePixelArt && initMapCanvas();
   draw(); 
 }
@@ -217,12 +218,9 @@ function initCanvas() {
 function initMapCanvas() {
   if (!mapImages.length) return;
   ppu = 24; //FIXME
-
-  // scale map canvas
-  mapScale = geoScale / ppu;
   let {width, height} = mapImages[0];
-  mapCanvas.width = canvas.width / mapScale + 2;
-  mapCanvas.height = canvas.height / mapScale + 2;
+  mapCanvas.width = canvas.width * ppu / scale + 2;
+  mapCanvas.height = canvas.height * ppu / scale + 2;
 
   // set up water canvas
   waterContext.canvas.width = canvas.width + sprites.water.width;
@@ -307,12 +305,12 @@ function pointInRegion(region, x, y) {
   context.beginPath()
   region.points.forEach(point => context.lineTo(...point));
   context.closePath();
-  return context.isPointInPath(x / geoScale, y / geoScale);
+  return context.isPointInPath(x / scale, y / scale);
 }
 
 function getClickedRegion(e) {
   let canvasPoint = elementCoords(canvas, e.pageX, e.pageY);
-  let mapPoint = canvasPoint.map((c, i) => c / geoScale - offset[i]);
+  let mapPoint = canvasPoint.map((c, i) => c / scale - offset[i]);
   let closest = closestPoint(...mapPoint, regions);
   //let region = pointInRegion(closest, x, y) ? closest : undefined; FIXME
   return closest;
@@ -348,18 +346,18 @@ canvas.addEventListener("mouseup", e => {
 
 canvas.addEventListener("mousemove", e => {
   if (mouse.panning) {
-    offset[0] += e.movementX / geoScale;
-    offset[1] += e.movementY / geoScale;
+    offset[0] += e.movementX / scale;
+    offset[1] += e.movementY / scale;
     draw();
   }
 });
 
 canvas.addEventListener("wheel", e => {
   let ec = elementCoords(canvas, e.pageX, e.pageY);
-  let gs = geoScale;
-  geoScale = Math.max(geoScale - e.deltaY / 5, ppu);
+  let gs = scale;
+  scale = Math.max(scale - e.deltaY / 5, ppu);
   usePixelArt && initMapCanvas();
-  offset = offset.map((c, i) => c - ec[i]/gs + ec[i]/geoScale);
+  offset = offset.map((c, i) => c - ec[i]/gs + ec[i]/scale);
   draw();
 });
 
