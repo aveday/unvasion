@@ -139,20 +139,18 @@ function tileDraw(ctx, image, position, center=true, tile) {
 function draw() {
   if (!regions) return //FIXME
   ctx.imageSmoothingEnabled = false;
-  let mapOffset = offset.map(c => Math.floor(c * scale));
-  let mapImgOffset = offset.map(c => Math.floor(c * ppu));
 
-  // draw water before translation
-  if (usePixelArt && map.img.loaded)
+  if (usePixelArt && map.img.loaded) {
+
+    // PIXEL MAP DRAWING
+    // TODO only composite on changes
+
+    // draw water background and translate canvas
+    let mapImgOffset = offset.map(c => Math.floor(c * ppu));
     map.img.ctx.drawImage(waterctx.canvas,
       ...mapImgOffset.map(c => 32 - c % 32 + frame %2),
       ...map.img.size, 0, 0, ...map.img.size);
-  else
-    fillCanvas(canvas, "#3557a0");
-
-  if (usePixelArt && map.img.loaded) {
     map.img.ctx.translate(...mapImgOffset);
-    // TODO only composite on changes
 
     // draw map image
     let img = map.img.frames[frame % map.img.frames.length];
@@ -172,13 +170,14 @@ function draw() {
       });
     }
 
-    // draw buildings
+    // draw building sprites
     for (const region of regions.filter(r => r.building)) {
       let townFrame = Math.floor(Math.min(region.building * 4, 4));
       let tile = [townFrame, 0, 32, 32];
       tileDraw(map.img.ctx, sprites.town, region.position, true, tile);
     }
 
+    // scale composited map to main canvas
     map.img.ctx.translate(...mapImgOffset.map(c => -c));
     if (usePixelArt)
       ctx.drawImage(
@@ -187,6 +186,12 @@ function draw() {
         ...map.img.size.map(c => c * (scale / ppu)));
 
   } else {
+
+    // VECTOR MAP DRAWING
+
+    // draw water background and translate canvas
+    let mapOffset = offset.map(c => Math.floor(c * scale));
+    fillCanvas(canvas, "#3557a0");
     ctx.translate(...mapOffset);
 
     // regions
@@ -208,8 +213,12 @@ function draw() {
     ctx.translate(...mapOffset.map(c => -c));
   }
 
+  // COMMON VECTOR GRAPHICS
   // TODO add pixmap version, move to geo draw block above
+
+  let mapOffset = offset.map(c => Math.floor(c * scale));
   ctx.translate(...mapOffset);
+
   // building commands
   ctx.setLineDash([scale*DASH_SIZE, scale*DASH_SIZE]);
   ctx.strokeStyle = "yellow";
