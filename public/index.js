@@ -25,7 +25,7 @@ let map = {
 
 let movement = {
   moves: new Map(),
-  duration: 400,
+  duration: 1200,
   fps: 30,
   progress: 1,
 }
@@ -96,23 +96,19 @@ function getUnitPositions(region) {
 }
 
 function drawUnits(region, draw) {
-  if (region.units.length === 0) return;
   ctx.fillStyle = playerColor(region.player);
   ctx.beginPath();
 
   let positions = getUnitPositions(region);
-
   region.units.forEach((unit, i) => {
-    let screenPos = positions[i].map(c => c * scale);
-
+    let pos = positions[i].map(c => c * scale);
     if (movement.moves.has(unit)) {
       let origin = movement.moves.get(unit)
         .map(c => c * scale * (1 - movement.progress));
-      screenPos = screenPos.map((c, i) => c*movement.progress + origin[i]);
+      pos = pos.map((c, i) => c * movement.progress + origin[i]);
     }
-
-    ctx.moveTo(...screenPos);
-    ctx.arc( ...screenPos, UNIT_SIZE * scale, 0, 2 * Math.PI);
+    ctx.moveTo(...pos);
+    ctx.arc( ...pos, UNIT_SIZE * scale, 0, 2 * Math.PI);
   });
 
   ctx.closePath();
@@ -161,10 +157,21 @@ function draw() {
     // draw map image
     let img = map.img.frames[frame % map.img.frames.length];
     map.img.ctx.drawImage(img, 0, 0);
+
     // draw unit sprites
-    for (const region of regions.filter(r => r.units.length))
-      getUnitPositions(region).forEach((pos, i) =>
-        tileDraw(map.img.ctx, i ? sprites.soldier : sprites.flagbearer, pos));
+    for (const region of regions.filter(r => r.units.length)) {
+      let positions = getUnitPositions(region);
+      region.units.forEach((unit, i) => {
+        let pos = positions[i];
+        if (movement.moves.has(unit)) {
+          let origin = movement.moves.get(unit)
+            .map(c => c * (1 - movement.progress));
+          pos = pos.map((c, i) => c * movement.progress + origin[i]);
+        }
+        tileDraw(map.img.ctx, i ? sprites.soldier : sprites.flagbearer, pos);
+      });
+    }
+
     // draw buildings
     for (const region of regions.filter(r => r.building)) {
       let townFrame = Math.floor(Math.min(region.building * 4, 4));
