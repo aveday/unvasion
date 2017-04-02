@@ -504,9 +504,9 @@ function playerSession(socket) {
   // render map if unrendered
   let frames = 2;
   if (game.map.imageURLs === undefined)
-    renderMap(game.map, frames, imageURLs => io.emit("sendMap", imageURLs));
+    renderMap(game.map, frames, imageURLs => io.emit("sendMapImage", imageURLs));
   else if (game.map.imageURLs.length === frames)
-    socket.emit("sendMap", game.map.imageURLs);
+    socket.emit("sendMapImage", game.map.imageURLs);
 
   socket.emit("sendPlayerId", player);
   socket.emit("sendState", game.state);

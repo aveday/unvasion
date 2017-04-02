@@ -1,6 +1,6 @@
 "use strict";
 
-window.addEventListener("resize", initCanvas, false);
+window.addEventListener("resize", updateCanvas, false);
 let canvas = document.getElementById("canvas");
 
 const sprites = {
@@ -19,11 +19,11 @@ let usePixelArt = true;
 
 let playerColors = ["blue", "red"];
 
-let context = canvas.getContext("2d");
-let mapCanvas = document.createElement("canvas");
-let mapContext = mapCanvas.getContext("2d");
+let map = {
+  img: { frames: [] },
+};
 
-let waterContext = document.createElement("canvas").getContext("2d");
+let waterctx = document.createElement("canvas").getContext("2d");
 let waterPattern;
 
 let socket = io();
@@ -33,11 +33,13 @@ let mouse = {};
 
 let scale, ppu;
 let offset = [0, 0];
-let mapImages = [];
 let frame = 0;
 let frameInterval;
 
 let regions, players, unitSpots;
+
+let ctx = canvas.getContext("2d");
+updateCanvas();
 
 function corner(region) {
   return region.position.map(c => (c - 0.5) * scale);
@@ -49,8 +51,8 @@ function playerColor(player) {
 }
 
 function drawRegion(region) {
-  context.fillShape(0, 0, region.polygon, scale, 0);
-  context.stroke();
+  ctx.fillShape(0, 0, region.polygon, scale, 0);
+  ctx.stroke();
 }
 
 function drawBuilding(region) {
@@ -60,10 +62,10 @@ function drawBuilding(region) {
   let [x, y] = corner(region).map(c => c + gap);
 
   if (region.building === 1) {
-    context.fillRect(x, y, size, size);
-    context.strokeRect(x, y, size, size);
+    ctx.fillRect(x, y, size, size);
+    ctx.strokeRect(x, y, size, size);
   } else for (let i = 0; i < BUILDING_PARTS; ++i) {
-    context.fillRect(x, y + i * part, size, part * region.building);
+    ctx.fillRect(x, y + i * part, size, part * region.building);
   }
 }
 
@@ -73,7 +75,7 @@ function drawPlans(targets, origin) {
       let gap = GAP_SIZE * scale / 2;
       let size = scale - gap * 2;
       let [x, y] = corner(origin).map(c => c + gap);
-      context.strokeRect(x, y, size, size);
+      ctx.strokeRect(x, y, size, size);
     }
   });
 }
@@ -88,17 +90,17 @@ function unitPositions(region) {
 
 function drawUnits(region, draw) {
   if (region.units.length === 0) return;
-  context.fillStyle = playerColor(region.player);
-  context.beginPath();
+  ctx.fillStyle = playerColor(region.player);
+  ctx.beginPath();
 
   for (const pos of unitPositions(region)) {
     let screenPos = pos.map(c => c * scale);
-    context.moveTo(...screenPos);
-    context.arc( ...screenPos, UNIT_SIZE * scale, 0, 2 * Math.PI);
+    ctx.moveTo(...screenPos);
+    ctx.arc( ...screenPos, UNIT_SIZE * scale, 0, 2 * Math.PI);
   }
 
-  context.closePath();
-  context.fill();
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawMoves(targets, origin) {
@@ -109,127 +111,131 @@ function drawMoves(targets, origin) {
     let shape = t === origin ? shapes.square : shapes.arrow;
     let size = scale / 8 / Math.sqrt(targets.length);
     let a = Math.atan2(...[1,0].map(i => t.position[i] - origin.position[i]));
-    context.fillShape(...dest, shape, size, a);
+    ctx.fillShape(...dest, shape, size, a);
   });
 }
 
-function tileDraw(context, image, position, center=true, tile) {
+function tileDraw(ctx, image, position, center=true, tile) {
   tile = tile || [0, 0, image.width, image.height];
   let size = tile.slice(2,4);
   let dest = position.map((c, i) => c * ppu - (center ? size[i] / 2 : 0));
   dest = dest.map(Math.floor);
   let source = [tile[0] * tile[2], tile[1] * tile[3], tile[2], tile[3]];
-  context.drawImage(image, ...source, ...dest, ...size);
+  ctx.drawImage(image, ...source, ...dest, ...size);
 }
 
 function draw() {
-  context.imageSmoothingEnabled = false;
-  let geoOffset = offset.map(c => Math.floor(c * scale));
-  let mapOffset = offset.map(c => Math.floor(c * ppu));
-  let mapZoom = scale / ppu;
-  let mapCanvasSize = [mapCanvas.width, mapCanvas.height];
+  if (!regions) return //FIXME
+  ctx.imageSmoothingEnabled = false;
+  let mapOffset = offset.map(c => Math.floor(c * scale));
+  let mapImgOffset = offset.map(c => Math.floor(c * ppu));
 
   // draw water before translation
-  if (usePixelArt && mapImages.length)
-    mapContext.drawImage(waterContext.canvas,
-      ...mapOffset.map(c => 32 - c % 32 + frame %2),
-      ...mapCanvasSize, 0, 0, ...mapCanvasSize);
+  if (usePixelArt && map.img.loaded)
+    map.img.ctx.drawImage(waterctx.canvas,
+      ...mapImgOffset.map(c => 32 - c % 32 + frame %2),
+      ...map.img.size, 0, 0, ...map.img.size);
   else
     fillCanvas(canvas, "#3557a0");
 
-  if (usePixelArt && mapImages.length) {
-    mapContext.translate(...mapOffset);
+  if (usePixelArt && map.img.loaded) {
+    map.img.ctx.translate(...mapImgOffset);
     // TODO only composite on changes
 
     // draw map image
-    let img = mapImages[frame % mapImages.length];
-    mapContext.drawImage(img, 0, 0);
+    let img = map.img.frames[frame % map.img.frames.length];
+    map.img.ctx.drawImage(img, 0, 0);
     // draw unit sprites
     for (const region of regions.filter(r => r.units.length))
       unitPositions(region).forEach((pos, i) =>
-        tileDraw(mapContext, i ? sprites.soldier : sprites.flagbearer, pos));
+        tileDraw(map.img.ctx, i ? sprites.soldier : sprites.flagbearer, pos));
     // draw buildings
     for (const region of regions.filter(r => r.building)) {
       let townFrame = Math.floor(Math.min(region.building * 4, 4));
       let tile = [townFrame, 0, 32, 32];
-      tileDraw(mapContext, sprites.town, region.position, true, tile);
+      tileDraw(map.img.ctx, sprites.town, region.position, true, tile);
     }
 
-    mapContext.translate(...mapOffset.map(c => -c));
+    map.img.ctx.translate(...mapImgOffset.map(c => -c));
     if (usePixelArt)
-      context.drawImage(
-        mapContext.canvas,
-        ...offset.map(c => c * scale % mapZoom - mapZoom),
-        ...mapCanvasSize.map(c => c * mapZoom));
+      ctx.drawImage(
+        map.img.ctx.canvas,
+        ...offset.map(c => c * scale % (scale / ppu) - (scale / ppu)),
+        ...map.img.size.map(c => c * (scale / ppu)));
 
   } else {
-    context.translate(...geoOffset);
+    ctx.translate(...mapOffset);
 
     // regions
-    context.globalAlpha = 1;
-    context.lineWidth = 2;
-    context.fillStyle = "#4f9627";
-    context.strokeStyle = "#3f751f";
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 2;
+    ctx.fillStyle = "#4f9627";
+    ctx.strokeStyle = "#3f751f";
     regions.filter(t => t.terrain >= 0).forEach(drawRegion);
 
     // buildings
-    context.strokeStyle = "#5b2000";
-    context.fillStyle = "#9b500d";
+    ctx.strokeStyle = "#5b2000";
+    ctx.fillStyle = "#9b500d";
     regions.filter(region => region.building).forEach(drawBuilding);
 
     // units
-    context.lineWidth = 0;
+    ctx.lineWidth = 0;
     regions.filter(region => region.units.length).forEach(drawUnits);
 
-    context.translate(...geoOffset.map(c => -c));
+    ctx.translate(...mapOffset.map(c => -c));
   }
 
   // TODO add pixmap version, move to geo draw block above
-  context.translate(...geoOffset);
+  ctx.translate(...mapOffset);
   // building commands
-  context.setLineDash([scale*DASH_SIZE, scale*DASH_SIZE]);
-  context.strokeStyle = "yellow";
+  ctx.setLineDash([scale*DASH_SIZE, scale*DASH_SIZE]);
+  ctx.strokeStyle = "yellow";
   commands.forEach(drawPlans);
-  context.setLineDash([]);
+  ctx.setLineDash([]);
   // movement commands
-  context.globalAlpha = 0.3;
-  context.lineWidth = 0;
-  context.fillStyle = "yellow";
+  ctx.globalAlpha = 0.3;
+  ctx.lineWidth = 0;
+  ctx.fillStyle = "yellow";
   commands.forEach(drawMoves);
-  context.globalAlpha = 1;
-  context.translate(...geoOffset.map(c => -c));
+  ctx.globalAlpha = 1;
+  ctx.translate(...mapOffset.map(c => -c));
 }
 
 function toggleGraphics() {
   usePixelArt = !usePixelArt;
-  usePixelArt && initMapCanvas();
+  usePixelArt && updateMapCanvas();
   draw();
 }
 
-function initCanvas() {
+function updateCanvas() {
   canvas.height = window.innerHeight;
   canvas.width = window.innerWidth;
   scale = 48; //FIXME
-  usePixelArt && initMapCanvas();
   draw(); 
 }
 
 function initMapCanvas() {
-  if (!mapImages.length) return;
   ppu = 24; //FIXME
-  let {width, height} = mapImages[0];
-  mapCanvas.width = canvas.width * ppu / scale + 2;
-  mapCanvas.height = canvas.height * ppu / scale + 2;
+  map.img.loaded = true;
 
   // set up water canvas
-  waterContext.canvas.width = canvas.width + sprites.water.width;
-  waterContext.canvas.height = canvas.height + sprites.water.height;
-  waterPattern = waterContext.createPattern(sprites.water, "repeat");
-  fillCanvas(waterContext.canvas, waterPattern);
+  waterctx.canvas.width = canvas.width + sprites.water.width;
+  waterctx.canvas.height = canvas.height + sprites.water.height;
+  waterPattern = waterctx.createPattern(sprites.water, "repeat");
+  fillCanvas(waterctx.canvas, waterPattern);
 
   // start frame interval
   clearInterval(frameInterval);
   frameInterval = setInterval(() => {++frame; draw()}, 1000);
+
+  updateMapCanvas()
+}
+
+function updateMapCanvas() {
+  map.img.ctx.canvas.width = canvas.width * ppu / scale + 2;
+  map.img.ctx.canvas.height = canvas.height * ppu / scale + 2;
+  map.img.size = [map.img.ctx.canvas.width, map.img.ctx.canvas.height];
+  draw();
 }
 
 function addCommand(origin, target) {
@@ -284,13 +290,19 @@ function loadState(state) {
   draw();
 }
 
-function loadMap(imageURLs) {
-  imageURLs.forEach(url => {
-    let image = new Image();
-    image.src = url;
-    mapImages.push(image);
-  });
-  mapImages[0].onload = initCanvas;
+function ImageFromSource(src) {
+  let image = new Image();
+  image.src = src;
+  return image;
+}
+
+function loadMapImage(imageURLs) {
+  map.img = {
+    loaded: false,
+    ctx: document.createElement("canvas").getContext("2d"),
+    frames: imageURLs.map(ImageFromSource),
+  };
+  map.img.frames[0].onload = initMapCanvas;
 }
 
 function startTurn(turnTime) {
@@ -301,11 +313,11 @@ function startTurn(turnTime) {
 }
 
 function pointInRegion(region, x, y) {
-  context.beginPath()
-  context.moveTo(...region.polygon[0]);
-  region.polygon.slice(1).forEach(point => context.lineTo(...point));
-  context.closePath();
-  return context.isPointInPath(x, y);
+  ctx.beginPath()
+  ctx.moveTo(...region.polygon[0]);
+  region.polygon.slice(1).forEach(point => ctx.lineTo(...point));
+  ctx.closePath();
+  return ctx.isPointInPath(x, y);
 }
 
 function getClickedRegion(e) {
@@ -354,7 +366,7 @@ canvas.addEventListener("wheel", e => {
   let ec = elementCoords(canvas, e.pageX, e.pageY);
   let gs = scale;
   scale = Math.max(scale - e.deltaY / 5, ppu);
-  usePixelArt && initMapCanvas();
+  usePixelArt && updateMapCanvas();
   offset = offset.map((c, i) => c - ec[i]/gs + ec[i]/scale);
   draw();
 });
@@ -363,7 +375,7 @@ socket.on("reload", () => window.location.reload());
 socket.on("msg", msg => console.log(msg)); 
 socket.on("sendPlayerId", id => player = id);
 socket.on("sendState", loadState);
-socket.on("sendMap", loadMap);
+socket.on("sendMapImage", loadMapImage);
 socket.on("startTurn", startTurn);
 socket.on("requestCommands", sendCommands);
 
