@@ -283,13 +283,6 @@ function sendCommands() {
   mouse = {};
 }
 
-function loadState(state) {
-  unitSpots = state.spots; //FIXME this is static, shouldn't be updated
-  players = state.players;
-  regions = state.regions;
-  draw();
-}
-
 function ImageFromSource(src) {
   let image = new Image();
   image.src = src;
@@ -373,8 +366,12 @@ canvas.addEventListener("wheel", e => {
 
 socket.on("reload", () => window.location.reload()); 
 socket.on("msg", msg => console.log(msg)); 
-socket.on("sendPlayerId", id => player = id);
-socket.on("sendState", loadState);
+
+socket.on("sendId", id => player = id);
+socket.on("sendRegions", r => { regions = r; draw(); });
+socket.on("sendPlayers", p => players = p);
+socket.on("sendSpots", s => unitSpots = s);
+
 socket.on("sendMapImage", loadMapImage);
 socket.on("startTurn", startTurn);
 socket.on("requestCommands", sendCommands);

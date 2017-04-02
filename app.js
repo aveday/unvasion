@@ -310,7 +310,6 @@ function Game(mapDef, turnTime) {
     waitingOn: new Set(),
     nextId: 0,
     turnCount: 0,
-    state: {regions, players, spots},
     imageURLs: [],
   });
 
@@ -413,7 +412,7 @@ function run(game) {
     });
 
   // send the updates to the players and start a new turn
-  io.emit("sendState", game.state); // FIXME to just send update
+  io.emit("sendRegions", game.regions); // FIXME to just send update
   startTurn(game);
 }
 
@@ -499,7 +498,6 @@ function playerSession(socket) {
 
   // add the player
   addPlayer(game, player);
-  socket.emit("msg", "Connected to server");
 
   // render map if unrendered
   let frames = 2;
@@ -507,9 +505,6 @@ function playerSession(socket) {
     renderMap(game.map, frames, imageURLs => io.emit("sendMapImage", imageURLs));
   else if (game.map.imageURLs.length === frames)
     socket.emit("sendMapImage", game.map.imageURLs);
-
-  socket.emit("sendPlayerId", player);
-  socket.emit("sendState", game.state);
 
   socket.on("ready", () => readyPlayer(game, player));
   socket.on("sendCommands", cmdIds => loadCommands(game, player, cmdIds));
@@ -527,12 +522,23 @@ function newPlayer(socket) {
 function addPlayer(game, player) {
   game.players.push(player);
   game.waitingOn.add(player);
-  console.log(chalk.yellow("Player %s joined game"), player);
+  let socket = sockets[player];
 
   // start on random empty region with 24 units (dev)
   let empty = findEmptyRegions(game.regions);
   let startingRegion = empty[Math.floor(Math.random() * empty.length)];
   setUnits(game, startingRegion, player, 24);
+
+  // send new player game info
+  socket.emit("msg", "Connected to server");
+  socket.emit("sendId", player);
+  socket.emit("sendSpots", game.spots);
+
+  // notify everyone of new player and updated regions
+  io.emit("sendPlayers", game.players);
+  io.emit("sendRegions", game.regions);
+  console.log(chalk.yellow("Player %s joined game"), player);
+
   return player;
 }
 
@@ -547,17 +553,12 @@ function removePlayer(game, player) {
   console.log(chalk.red("Player %s disconnected"), player);
   game.players = game.players.filter(p => p !== player);
   game.waitingOn.delete(player);
-  deletePlayerUnits(game.regions, player);
-  io.emit("sendState", game.state);
-}
-
-function deletePlayerUnits(region, player) {
-  if (region.hasOwnProperty("length")) {
-    region.forEach(r => deletePlayerUnits(r, player));
-  } else if (region.player === player) {
+  game.regions.forEach(region => {
     region.units = [];
     region.player = null;
-  }
+  });
+  io.emit("sendPlayers", game.players);
+  io.emit("sendRegions", game.regions);
 }
 
 /*****************
