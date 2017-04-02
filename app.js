@@ -409,7 +409,7 @@ function run(game) {
   game.regions.filter(t => t.units.length > REGION_MAX)
     .forEach(region => {
       let damage = (region.units.length - REGION_MAX) / UNIT_COEFFICIENT;
-      region.units.splice(0, Math.ceil(damage));
+      region.units.splice(-Math.ceil(damage));
     });
 
   // send the updates to the players and start a new turn
@@ -459,7 +459,10 @@ function calculateFatalities(region) {
 }
 
 function sendUnits(region) {
-  region.groups.forEach(group => group.target.inbound.push(group));
+  region.groups.forEach(group => {
+    let i = group.target === region ? 0 : group.target.inbound.length;
+    group.target.inbound.splice(i, 0, group);
+  });
   region.groups = [];
 }
 
