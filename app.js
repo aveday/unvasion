@@ -360,7 +360,12 @@ function loadCommands(game, player, commandIds) {
   });
 
   game.waitingOn.delete(player);
-  if (!game.waitingOn.size) run(game);
+  if (!game.waitingOn.size) {
+    run(game);
+    // send the updates to the players and start a new turn
+    io.emit("sendRegions", game.regions); // FIXME to just send update
+    startTurn(game);
+  }
 }
 
 /**************
@@ -389,32 +394,72 @@ function setUnits(game, region, player, n) {
 function run(game) {
   clearTimeout(gameTimeouts.get(game));
   console.log(chalk.cyan("Running turn %s"), game.turnCount++);
+
   let occupied = game.regions.filter(region => region.units.length > 0);
 
-  // execute interactions
-  occupied.forEach(runInteractions);
-  occupied.forEach(calculateFatalities);
+  // 1. Execute Interactions
+  occupied.forEach(region => {
+    region.groups.forEach(group => {
+      let move = false;
+      //attack enemy regions
+      if (areEnemies(region, group.target)) {
+        group.target.attackedBy = group.target.attackedBy.concat(group);
+      // construct buildings
+      } else if (group.build) {
+        group.target.building += group.length / REGION_MAX;
+        group.target.building = Math.min(group.target.building, 1);
+      } else {
+        move = true;
+      }
+      if (!move) group.target = region;
+    });
+  });
 
-  // execute movement
-  occupied.forEach(sendUnits);
-  game.regions.forEach(receiveUnits);
+  // 2. Calculate Fatalities
+  occupied.forEach(region => {
+    let damage = Math.ceil(region.attackedBy.length / UNIT_COEFFICIENT);
+    let groupDamage = evenChunks(Array(damage), region.groups.length);
+    let groupDeaths = region.groups
+      .map((group, i) => group.splice(0, groupDamage[i].length));
+    if (region.groups.every(group => group.length === 0))
+      region.player = null;
+    region.attackedBy = [];
+  });
 
-  // create new units in occupied houses
+  // 3. Dispatch Units
+  occupied.forEach(region => {
+    region.groups.forEach(group => {
+      let i = group.target === region ? 0 : group.target.inbound.length;
+      group.target.inbound.splice(i, 0, group);
+    });
+    region.groups = [];
+  });
+
+  // 4. Merge Units
+  game.regions.forEach(region => {
+    // join inbound groups of the same player
+    let groups = [];
+    region.inbound.forEach(group => {
+      let allies = groups.find(g => g.player === group.player);
+      allies && allies.push(...group) || groups.push(group);
+    });
+    region.inbound = [];
+    // largest group wins, with losses equal to the size of second largest
+    let victor = groups.reduce((v, g) => g.length > v.length ? g : v, []);
+    let deaths = groups.map(g => g.length).sort((a, b) => b - a)[1] || 0;
+    region.units = Array.from(victor.slice(deaths));
+    region.player = region.units.length ? victor.player : null;
+  });
+
+  // 5. Populate Towns
   game.regions.filter(t => t.building === 1 && t.units.length >= SPAWN_REQ)
-    .forEach(region => {
-      region.units.push(game.nextId++);
-    });
+    .forEach(region => region.units.push(game.nextId++));
 
-  // kill units in overpopulated regions
-  game.regions.filter(t => t.units.length > REGION_MAX)
-    .forEach(region => {
-      let damage = (region.units.length - REGION_MAX) / UNIT_COEFFICIENT;
-      region.units.splice(-Math.ceil(damage));
-    });
-
-  // send the updates to the players and start a new turn
-  io.emit("sendRegions", game.regions); // FIXME to just send update
-  startTurn(game);
+  // 6. Starve Crowds
+  game.regions.filter(t => t.units.length > REGION_MAX).forEach(region => {
+    let damage = (region.units.length - REGION_MAX) / UNIT_COEFFICIENT;
+    region.units.splice(-Math.ceil(damage));
+  });
 }
 
 function setGroups(region, targets, builds) {
@@ -425,60 +470,6 @@ function setGroups(region, targets, builds) {
     group.target = targets[i];
     group.build = builds[i];
   });
-}
-
-function runInteractions(region) {
-  region.groups.forEach(group => {
-    let move = false;
-
-    //attack enemy regions
-    if (areEnemies(region, group.target)) {
-      group.target.attackedBy = group.target.attackedBy.concat(group);
-
-    // construct buildings
-    } else if (group.build) {
-      group.target.building += group.length / REGION_MAX;
-      group.target.building = Math.min(group.target.building, 1);
-
-    } else {
-      move = true;
-
-    } if (!move) {
-      group.target = region;
-    }
-  });
-}
-
-function calculateFatalities(region) {
-  let damage = region.attackedBy.length / UNIT_COEFFICIENT;
-  let deaths = evenChunks(Array(Math.ceil(damage)), region.groups.length);
-  region.groups.forEach((group, i) => group.splice(0, deaths[i].length));
-  if (region.groups.every(group => group.length === 0))
-    region.player = null;
-  region.attackedBy = [];
-}
-
-function sendUnits(region) {
-  region.groups.forEach(group => {
-    let i = group.target === region ? 0 : group.target.inbound.length;
-    group.target.inbound.splice(i, 0, group);
-  });
-  region.groups = [];
-}
-
-function receiveUnits(region) {
-  // join inbound groups of the same player
-  let groups = [];
-  region.inbound.forEach(group => {
-    let allies = groups.find(g => g.player === group.player);
-    allies && allies.push(...group) || groups.push(group);
-  });
-  region.inbound = [];
-  // largest group wins, with losses equal to the size of second largest
-  let victor = groups.reduce((v, g) => g.length > v.length ? g : v, []);
-  let deaths = groups.map(g => g.length).sort((a, b) => b - a)[1] || 0;
-  region.units = Array.from(victor.slice(deaths));
-  region.player = region.units.length ? victor.player : null;
 }
 
 /*****************
