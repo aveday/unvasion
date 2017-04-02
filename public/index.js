@@ -23,6 +23,13 @@ let map = {
   img: { frames: [] },
 };
 
+let movement = {
+  moves: new Map(),
+  duration: 400,
+  fps: 30,
+  progress: 1,
+}
+
 let waterctx = document.createElement("canvas").getContext("2d");
 let waterPattern;
 
@@ -80,7 +87,7 @@ function drawPlans(targets, origin) {
   });
 }
 
-function unitPositions(region) {
+function getUnitPositions(region) {
   //TODO calculate and parameterise unit spread
   return region.units.map((unit, i) => {
     let spot = unitSpots[i].map(c => c * (1 + 4/region.units.length));
@@ -93,11 +100,20 @@ function drawUnits(region, draw) {
   ctx.fillStyle = playerColor(region.player);
   ctx.beginPath();
 
-  for (const pos of unitPositions(region)) {
-    let screenPos = pos.map(c => c * scale);
+  let positions = getUnitPositions(region);
+
+  region.units.forEach((unit, i) => {
+    let screenPos = positions[i].map(c => c * scale);
+
+    if (movement.moves.has(unit)) {
+      let origin = movement.moves.get(unit)
+        .map(c => c * scale * (1 - movement.progress));
+      screenPos = screenPos.map((c, i) => c*movement.progress + origin[i]);
+    }
+
     ctx.moveTo(...screenPos);
     ctx.arc( ...screenPos, UNIT_SIZE * scale, 0, 2 * Math.PI);
-  }
+  });
 
   ctx.closePath();
   ctx.fill();
@@ -147,7 +163,7 @@ function draw() {
     map.img.ctx.drawImage(img, 0, 0);
     // draw unit sprites
     for (const region of regions.filter(r => r.units.length))
-      unitPositions(region).forEach((pos, i) =>
+      getUnitPositions(region).forEach((pos, i) =>
         tileDraw(map.img.ctx, i ? sprites.soldier : sprites.flagbearer, pos));
     // draw buildings
     for (const region of regions.filter(r => r.building)) {
@@ -298,6 +314,44 @@ function loadMapImage(imageURLs) {
   map.img.frames[0].onload = initMapCanvas;
 }
 
+function loadRegions(newRegions) {
+  if (regions === undefined) {
+    regions = newRegions;
+    return;
+  }
+
+  let unitOrigins = new Map();
+
+  regions.filter(region => region.units.length).forEach(region => {
+    let positions = getUnitPositions(region);
+    region.units.forEach((unit, i) => unitOrigins.set(unit, positions[i]));
+  });
+
+  regions = newRegions;
+
+  regions.filter(region => region.units.length).forEach(region => {
+    region.units.forEach(unit => {
+      let origin = unitOrigins.get(unit);
+      if (origin) movement.moves.set(unit, origin);
+    });
+  });
+
+  movement.start = new Date().getTime();
+  movement.interval = setInterval(updateMovement, 1000/movement.fps);
+}
+
+function updateMovement() {
+  let time = new Date().getTime();
+  movement.progress = Math.min((time - movement.start) / movement.duration, 1);
+
+  if (movement.progress === 1) {
+    movement.moves.clear();
+    clearInterval(movement.interval);
+  }
+
+  draw();
+}
+
 function startTurn(turnTime) {
   // place construction commands on adjacent unfinished buildings
   regions.filter(t => t.building && t.building < 1 && !t.units.length)
@@ -368,7 +422,7 @@ socket.on("reload", () => window.location.reload());
 socket.on("msg", msg => console.log(msg)); 
 
 socket.on("sendId", id => player = id);
-socket.on("sendRegions", r => { regions = r; draw(); });
+socket.on("sendRegions", loadRegions);
 socket.on("sendPlayers", p => players = p);
 socket.on("sendSpots", s => unitSpots = s);
 

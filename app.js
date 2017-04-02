@@ -119,6 +119,7 @@ function Island(mapDef) {
 function Region(polygon, id) {
   return {
     id,
+    //TODO don't send geographic properties in updates
     polygon: Array.from(polygon),
     position: Array.from(polygon.data),
     terrain: polygon.data.terrain,
