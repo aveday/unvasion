@@ -116,11 +116,11 @@ function Island(mapDef) {
   return map;
 }
 
-function Region(points, id) {
-  let [x, y] = points.data;
+function Region(polygon, id) {
+  let [x, y] = polygon.data;
   return {
-    x, y, points, id,
-    terrain: points.data.terrain,
+    x, y, polygon, id,
+    terrain: polygon.data.terrain,
     units: [],
     connected: [],
     attackedBy: [],

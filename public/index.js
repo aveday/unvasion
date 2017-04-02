@@ -49,7 +49,7 @@ function playerColor(player) {
 }
 
 function drawRegion(region) {
-  context.fillShape(0, 0, region.points, scale, 0);
+  context.fillShape(0, 0, region.polygon, scale, 0);
   context.stroke();
 }
 
@@ -303,7 +303,7 @@ function startTurn(turnTime) {
 
 function pointInRegion(region, x, y) {
   context.beginPath()
-  region.points.forEach(point => context.lineTo(...point));
+  region.polygon.forEach(point => context.lineTo(...point));
   context.closePath();
   return context.isPointInPath(x / scale, y / scale);
 }
