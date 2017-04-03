@@ -242,7 +242,7 @@ function toggleGraphics() {
 function updateCanvas() {
   canvas.height = window.innerHeight;
   canvas.width = window.innerWidth;
-  scale = 48; //FIXME
+  scale = 120; //FIXME
   draw(); 
 }
 
@@ -328,6 +328,12 @@ function loadMapImage(imageURLs) {
     frames: imageURLs.map(ImageFromSource),
   };
   map.img.frames[0].onload = initMapCanvas;
+
+  // FIXME should be done in first loadRegion
+  let groupPos = regions.find(region => region.player === player).position;
+  if (groupPos) offset = [ 
+    (canvas.width / scale) / 2 - groupPos[0],
+    (canvas.height / scale) / 2 - groupPos[1]];
 }
 
 function loadRegions(newRegions) {
