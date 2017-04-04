@@ -242,6 +242,7 @@ function toggleGraphics() {
 function updateCanvas() {
   canvas.height = window.innerHeight;
   canvas.width = window.innerWidth;
+  usePixelArt && map.img.loaded && updateMapCanvas();
   scale = 120; //FIXME
   draw(); 
 }
