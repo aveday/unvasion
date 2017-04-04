@@ -444,11 +444,17 @@ function run(game) {
       allies && allies.push(...group) || groups.push(group);
     });
     region.inbound = [];
-    // largest group wins, with losses equal to the size of second largest
-    let victor = groups.reduce((v, g) => g.length > v.length ? g : v, []);
-    let deaths = groups.map(g => g.length).sort((a, b) => b - a)[1] || 0;
-    region.units = Array.from(victor.slice(deaths));
-    region.player = region.units.length ? victor.player : null;
+    // enemy groups battle until one group remains
+    while (groups.length > 1) {
+      let nUnits = [].concat(...groups).length;
+      groups = groups.map(group => {
+        let damage = Math.ceil((nUnits - group.length) / UNIT_COEFFICIENT);
+        group.splice(0, damage); //DEATH
+        return group;
+      }).filter(group => group.length);
+    }
+    region.player = groups.length ? groups[0].player : null;
+    region.units = groups.length ? groups[0] : [];
   });
 
   // 5. Populate Towns
