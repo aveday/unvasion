@@ -425,6 +425,10 @@ canvas.addEventListener("mouseup", e => {
   }
 });
 
+canvas.addEventListener("mouseleave", e => {
+  mouse.panning = false;
+});
+
 canvas.addEventListener("mousemove", e => {
   if (mouse.panning) {
     offset[0] += e.movementX / scale;
