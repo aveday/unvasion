@@ -554,7 +554,7 @@ function removePlayer(game, player) {
   console.log(chalk.red("Player %s disconnected"), player);
   game.players = game.players.filter(p => p !== player);
   game.waitingOn.delete(player);
-  game.regions.forEach(region => {
+  game.regions.filter(region => region.player === player).forEach(region => {
     region.units = [];
     region.player = null;
   });
