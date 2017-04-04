@@ -335,16 +335,11 @@ function loadCommands(game, player, commandIds) {
   game.regions
     .filter(region => region.player === player)
     .forEach(region => setGroups(region, [region], [false]));
+
   // load the commands from the player messages
+  // TODO properly validate commands (eg: targets <= units.length)
   let nCommands = commandIds.reduce((a, v) => a + v[1].length, 0);
   console.log("Player %s sent %s commands", player, nCommands);
-  // TODO properly validate commands (eg: targets <= units.length)
-
-  // ignore dupes //TODO safely allow updated commands
-  if (!game.waitingOn.has(player)) {
-    console.warn(player, chalk.bold.red("duplicate commands ignored"));
-    return;
-  }
 
   // determine which commands are for construction
   let planIds = commandIds

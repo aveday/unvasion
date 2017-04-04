@@ -311,7 +311,6 @@ function sendCommands() {
   });
 
   socket.emit("sendCommands", commandIds);
-  commands.clear();
   mouse = {};
 }
 
@@ -376,6 +375,7 @@ function updateMovement() {
 }
 
 function startTurn(turnTime) {
+  commands.clear();
   // place construction commands on adjacent unfinished buildings
   regions.filter(t => t.building && t.building < 1 && !t.units.length)
       .filter(t => t.connected.some(id => regions[id].player === player))
