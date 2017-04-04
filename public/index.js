@@ -358,6 +358,7 @@ function loadRegions(newRegions) {
     });
   });
 
+  clearInterval(movement.interval);
   movement.start = new Date().getTime();
   movement.interval = setInterval(updateMovement, 1000/movement.fps);
 }
