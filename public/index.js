@@ -283,13 +283,11 @@ function addCommand(origin, target) {
   // remove commands
   if (targets.includes(target)) {
     targets.splice(targets.indexOf(target), 1);
-    if (!targets.length)
-      delete commands.delete(origin);
   }
   // building commands
   else if (origin.player === null) {
     // only allow plans adjacent to friendly regions
-    if (origin.connected.some(id => regions[id].player === player))
+    if (buildable(origin))
       targets.push(target);
   }
   // movement commands
@@ -300,7 +298,20 @@ function addCommand(origin, target) {
       targets.shift();
   }
 
+  if (!targets.length)
+    delete commands.delete(origin);
   draw();
+}
+
+function buildable(region) {
+  let unitAdjacent = region.connected.some(id => regions[id].player === player);
+  let buildingAdjacent = region.connected.some(id => {
+    return regions[id].building
+      || commands.has(regions[id])
+      && commands.get(regions[id]).includes(regions[id]);
+  });
+  console.log(unitAdjacent, buildingAdjacent);
+  return unitAdjacent && !buildingAdjacent;
 }
 
 function sendCommands() {
