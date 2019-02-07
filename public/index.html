@@ -4,19 +4,20 @@
 <script src="/socket.io/socket.io.js"></script>
 <link rel="stylesheet" href="style.css">
 
-<header>
-  <h3 onclick="sendCommands()"> Unvasion v0.0.1 </h3>
-  <p>
-    Players: <span id="playerCount">0</span> &emsp;
-    <button type="button" onclick="socket.emit('ready')"> start game</button>
-  </p>
-</header>
-
-<div id="progressBorder">
-  <div id="progressBar"></div>
+<div class="panel">
+<button onclick="socket.emit('ready')"> Start Game </button>
+<button onclick="toggleGraphics()"> Toggle graphics</button>
 </div>
 
-<canvas id="canvas">
-<script src="Point.js"></script>
+<canvas oncontextmenu="return false" id="canvas">
+<img id="soldier" src="soldier.png"></img>
+<img id="builder" src="builder.png"></img>
+<img id="flagbearer" src="redflag.png"></img>
+<img id="castle" src="castle.png"></img>
+<img id="town" src="town5.png"></img>
+<img id="city" src="city.png"></img>
+<img id="water" src="water32.png"></img>
+</canvas>
+
 <script src="util.js"></script>
 <script src="index.js"></script>
